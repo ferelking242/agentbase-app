@@ -32,6 +32,11 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Create local.properties
+        run: |
+          echo "flutter.sdk=$FLUTTER_ROOT" > android/local.properties
+          echo "sdk.dir=$ANDROID_HOME" >> android/local.properties
+
       - name: Get dependencies
         run: flutter pub get
 
@@ -49,7 +54,7 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30
 
-      - name: Build APK splits (arm64)
+      - name: Build APK arm64 split
         run: flutter build apk --release --target-platform android-arm64 --split-per-abi
         continue-on-error: true
 
@@ -90,9 +95,7 @@ jobs:
           LANG: en_US.UTF-8
 
       - name: Build iOS (no codesign)
-        run: |
-          flutter build ios --release --no-codesign \
-            --dart-define=FLUTTER_APP_NAME=AgentBase
+        run: flutter build ios --release --no-codesign
 
       - name: Package IPA (TrollStore compatible)
         run: |

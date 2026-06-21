@@ -14,7 +14,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final _github = GitHubService();
   bool _patOk = false;
-  bool _loading = true;
   int _roomCount = 5;
   final _patController = TextEditingController();
   bool _patVisible = false;
@@ -31,9 +30,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _github.setPat(pat);
       _patController.text = pat;
       final ok = await _github.validatePat();
-      if (mounted) setState(() { _patOk = ok; _loading = false; });
-    } else {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() => _patOk = ok);
     }
   }
 
