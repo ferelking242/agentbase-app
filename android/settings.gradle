@@ -1,1 +1,35 @@
-include ':app'
+pluginManagement {
+    def flutterSdkPath = {
+        // CI: FLUTTER_ROOT is set by subosito/flutter-action
+        def envPath = System.getenv("FLUTTER_ROOT")
+        if (envPath) return envPath
+        // Local dev: read from local.properties
+        def props = new Properties()
+        def propsFile = file("local.properties")
+        if (propsFile.exists()) propsFile.withInputStream { props.load(it) }
+        def sdk = props.getProperty("flutter.sdk")
+        assert sdk, "Flutter SDK not found. Set FLUTTER_ROOT env var or flutter.sdk in local.properties"
+        return sdk
+    }()
+
+    // Provides dev.flutter.flutter-gradle-plugin + resolution of AGP
+    includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
+
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+
+    // Explicit versions so Gradle can resolve plugins without a version in app/build.gradle
+    plugins {
+        id 'com.android.application' version '8.2.2' apply false
+        id 'org.jetbrains.kotlin.android' version '1.9.22' apply false
+    }
+}
+
+plugins {
+    id "dev.flutter.flutter-gradle-plugin" version "1.0.0" apply false
+}
+
+include ":app"
