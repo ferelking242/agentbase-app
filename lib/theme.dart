@@ -41,12 +41,12 @@ ThemeData buildTheme() {
         letterSpacing: -0.3,
       ),
     ),
-    cardTheme: CardThemeData(
+    cardTheme: const CardTheme(
       color: kSurface,
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: kBorder),
+        borderRadius: BorderRadius.all(Radius.circular(12)),
+        side: BorderSide(color: kBorder),
       ),
     ),
     dividerColor: kBorder,
