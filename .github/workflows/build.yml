@@ -37,6 +37,9 @@ jobs:
           echo "flutter.sdk=$FLUTTER_ROOT" > android/local.properties
           echo "sdk.dir=$ANDROID_HOME" >> android/local.properties
 
+      - name: Precache Android artifacts
+        run: flutter precache --android
+
       - name: Get dependencies
         run: flutter pub get
 
