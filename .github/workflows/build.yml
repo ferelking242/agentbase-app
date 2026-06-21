@@ -32,13 +32,28 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Create local.properties
-        run: |
-          echo "flutter.sdk=$FLUTTER_ROOT" > android/local.properties
-          echo "sdk.dir=$ANDROID_HOME" >> android/local.properties
-
       - name: Precache Android artifacts
         run: flutter precache --android
+
+      - name: Generate correct Gradle files from Flutter template
+        run: |
+          # Create a temp Flutter project to get correct 3.22.0 Gradle files
+          flutter create --org com.ferelking242 --project-name agentbase_temp /tmp/flutter_template
+          # Copy template Gradle files (guaranteed compatible with this Flutter version)
+          cp /tmp/flutter_template/android/settings.gradle android/
+          cp /tmp/flutter_template/android/build.gradle android/
+          cp /tmp/flutter_template/android/app/build.gradle android/app/
+          cp /tmp/flutter_template/android/gradle/wrapper/gradle-wrapper.properties android/gradle/wrapper/
+          # Patch app/build.gradle namespace to our package
+          sed -i 's/com\.ferelking242\.agentbase_temp/com.ferelking242.agentbase/g' android/app/build.gradle
+          sed -i 's/applicationId "com\.ferelking242\.agentbase_temp"/applicationId "com.ferelking242.agentbase"/g' android/app/build.gradle
+          # Create local.properties for CI (needed by settings.gradle)
+          echo "flutter.sdk=$FLUTTER_ROOT" > android/local.properties
+          echo "sdk.dir=$ANDROID_HOME" >> android/local.properties
+          echo "✅ Generated Gradle files:"
+          cat android/settings.gradle
+          echo "---"
+          head -20 android/app/build.gradle
 
       - name: Get dependencies
         run: flutter pub get
