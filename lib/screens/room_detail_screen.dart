@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
   import 'package:flutter/foundation.dart' show kIsWeb;
   import 'package:flutter/material.dart';
   import 'package:image_picker/image_picker.dart';
@@ -206,7 +207,7 @@ import 'dart:convert';
                   keyboardType: TextInputType.multiline,
                   style: const TextStyle(color: kText, fontSize: 14, height: 1.5),
                   decoration: const InputDecoration(
-                    hintText: 'Écris un prompt pour l'agent…',
+                    hintText: "Écris un prompt pour l'agent...",
                     hintStyle: TextStyle(color: kMuted, fontSize: 14),
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.fromLTRB(14, 12, 14, 4), isDense: true),
@@ -259,7 +260,7 @@ import 'dart:convert';
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
                   if (att.type == 'image')
                     ClipRRect(borderRadius: BorderRadius.circular(5),
-                      child: Image.memory(att.bytes, width: 28, height: 28, fit: BoxFit.cover))
+                      child: Image.memory(Uint8List.fromList(att.bytes), width: 28, height: 28, fit: BoxFit.cover))
                   else Icon(att.type == 'audio' ? Icons.audiotrack_outlined : Icons.insert_drive_file_outlined, size: 18, color: kMuted2),
                   const SizedBox(width: 6),
                   ConstrainedBox(constraints: const BoxConstraints(maxWidth: 90),
