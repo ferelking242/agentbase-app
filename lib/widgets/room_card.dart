@@ -1,136 +1,87 @@
 import 'package:flutter/material.dart';
-import '../models/room.dart';
-import '../theme.dart';
+  import '../models/room.dart';
+  import '../theme.dart';
 
-class RoomCard extends StatelessWidget {
-  final Room room;
-  final VoidCallback onTap;
+  class RoomCard extends StatelessWidget {
+    final Room room;
+    final VoidCallback onTap;
+    const RoomCard({super.key, required this.room, required this.onTap});
 
-  const RoomCard({super.key, required this.room, required this.onTap});
-
-  Color _parseColor(String hex) {
-    try {
-      final h = hex.replaceAll('#', '');
-      return Color(int.parse('FF$h', radix: 16));
-    } catch (_) {
-      return kAccent;
+    Color _parseColor(String hex) {
+      try {
+        final h = hex.replaceAll('#', '');
+        return Color(int.parse('FF$h', radix: 16));
+      } catch (_) { return kAccent; }
     }
-  }
 
-  @override
-  Widget build(BuildContext context) {
-    final accent = _parseColor(room.color);
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: kSurface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: kBorder),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(14),
+    @override
+    Widget build(BuildContext context) {
+      final accent = _parseColor(room.color);
+      return GestureDetector(
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            color: kSurface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: kBorder),
+          ),
+          clipBehavior: Clip.hardEdge,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(height: 3, color: accent),
+              // Top accent line
+              Container(height: 2, color: accent),
               Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: accent.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: accent.withOpacity(0.25)),
-                          ),
-                          child: Center(
-                            child: Text(
-                              room.icon,
-                              style: const TextStyle(fontSize: 20),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                    Container(
+                      width: 40, height: 40,
+                      decoration: BoxDecoration(
+                        color: accent.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Center(child: Text(room.icon, style: const TextStyle(fontSize: 20))),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
                             children: [
-                              Text(
-                                room.name,
-                                style: const TextStyle(
-                                  color: kText,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: -0.3,
-                                ),
+                              Expanded(
+                                child: Text(room.name, style: const TextStyle(
+                                  color: kText, fontSize: 14,
+                                  fontWeight: FontWeight.w700, letterSpacing: -0.2),
+                                  overflow: TextOverflow.ellipsis),
                               ),
                               if (room.passwordProtected)
-                                Row(
-                                  children: [
-                                    Icon(Icons.lock_outline,
-                                        size: 11, color: kMuted),
-                                    const SizedBox(width: 3),
-                                    Text('Protégé',
-                                        style: TextStyle(
-                                            fontSize: 11, color: kMuted)),
-                                  ],
+                                const Padding(
+                                  padding: EdgeInsets.only(left: 4),
+                                  child: Icon(Icons.lock_outline, size: 12, color: kMuted),
                                 ),
                             ],
                           ),
-                        ),
-                        Icon(Icons.arrow_forward_ios,
-                            size: 13, color: kMuted),
-                      ],
-                    ),
-                    if (room.description.isNotEmpty) ...[
-                      const SizedBox(height: 10),
-                      Text(
-                        room.description,
-                        style: const TextStyle(
-                            fontSize: 12.5, color: kMuted2, height: 1.5),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                          if (room.description.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 3),
+                              child: Text(room.description,
+                                style: const TextStyle(color: kMuted2, fontSize: 12, height: 1.4),
+                                maxLines: 2, overflow: TextOverflow.ellipsis),
+                            ),
+                        ],
                       ),
-                    ],
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        _chip(accent, '${room.transcriptCount} fichiers'),
-                        const SizedBox(width: 6),
-                        _chip(kPurple, room.created),
-                      ],
                     ),
+                    const SizedBox(width: 8),
+                    const Icon(Icons.arrow_forward_ios, size: 12, color: kMuted),
                   ],
                 ),
               ),
             ],
           ),
         ),
-      ),
-    );
+      );
+    }
   }
-
-  Widget _chip(Color color, String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 10.5,
-          color: color,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
-  }
-}
