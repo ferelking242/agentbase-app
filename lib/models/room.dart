@@ -1,49 +1,43 @@
-class Room {
-  final String id;
-  final String name;
-  final String description;
-  final String color;
-  final String icon;
-  final String created;
-  final bool passwordProtected;
-  final int transcriptCount;
-  final int chatCount;
+import 'package:flutter/material.dart';
 
-  Room({
-    required this.id,
-    required this.name,
-    required this.description,
-    required this.color,
-    required this.icon,
-    required this.created,
-    required this.passwordProtected,
-    required this.transcriptCount,
-    required this.chatCount,
-  });
+  class Room {
+    final String id, name, description, color;
+    final int transcriptCount, chatCount;
+    const Room({
+      required this.id, required this.name,
+      required this.description, required this.color,
+      required this.transcriptCount, required this.chatCount,
+    });
 
-  factory Room.fromJson(Map<String, dynamic> json) {
-    return Room(
-      id: json['id'] ?? '',
-      name: json['name'] ?? '',
-      description: json['description'] ?? '',
-      color: json['color'] ?? '#6366F1',
-      icon: json['icon'] ?? '📁',
-      created: json['created'] ?? '',
-      passwordProtected: json['password_protected'] ?? false,
-      transcriptCount: json['transcript_count'] ?? 0,
-      chatCount: json['chat_count'] ?? 0,
+    factory Room.fromJson(Map<String, dynamic> j) => Room(
+      id:             j['id']              as String? ?? '',
+      name:           j['name']            as String? ?? 'Room',
+      description:    j['description']     as String? ?? '',
+      color:          j['color']           as String? ?? '#6366f1',
+      transcriptCount: j['transcript_count'] as int? ?? 0,
+      chatCount:      j['chat_count']      as int? ?? 0,
     );
-  }
 
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'name': name,
-    'description': description,
-    'color': color,
-    'icon': icon,
-    'created': created,
-    'password_protected': passwordProtected,
-    'transcript_count': transcriptCount,
-    'chat_count': chatCount,
-  };
-}
+    Color get accentColor {
+      try { return Color(int.parse('FF${color.replaceAll("#","")}', radix: 16)); }
+      catch (_) { return const Color(0xFF6366F1); }
+    }
+
+    IconData get iconData {
+      switch (id.toLowerCase()) {
+        case 'watchtower': return Icons.radar_outlined;
+        case 'scorais':    return Icons.bar_chart_outlined;
+        case 'room-3':     return Icons.memory_outlined;
+        case 'room-4':     return Icons.code_outlined;
+        case 'room-5':     return Icons.auto_awesome_outlined;
+        default:
+          final l = name.toLowerCase();
+          if (l.contains('code') || l.contains('dev'))      return Icons.code_outlined;
+          if (l.contains('design') || l.contains('ui'))     return Icons.palette_outlined;
+          if (l.contains('data')  || l.contains('score'))   return Icons.bar_chart_outlined;
+          if (l.contains('watch') || l.contains('monitor')) return Icons.radar_outlined;
+          if (l.contains('server') || l.contains('back'))   return Icons.dns_outlined;
+          return Icons.layers_outlined;
+      }
+    }
+  }

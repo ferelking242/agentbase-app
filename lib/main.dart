@@ -1,28 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'screens/home_screen.dart';
-import 'theme.dart';
+  import 'services/github_service.dart';
+  import 'screens/home_screen.dart';
+  import 'theme.dart';
 
-void main() {
-  WidgetsFlutterBinding.ensureInitialized();
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarBrightness: Brightness.dark,
-    statusBarIconBrightness: Brightness.light,
-  ));
-  runApp(const AgentBaseApp());
-}
+  void main() {
+    WidgetsFlutterBinding.ensureInitialized();
+    runApp(AgentBaseApp());
+  }
 
-class AgentBaseApp extends StatelessWidget {
-  const AgentBaseApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
+  class AgentBaseApp extends StatelessWidget {
+    final _github = GitHubService();
+    AgentBaseApp({super.key});
+    @override
+    Widget build(BuildContext context) => MaterialApp(
       title: 'AgentBase',
-      debugShowCheckedModeBanner: false,
       theme: buildTheme(),
-      home: const HomeScreen(),
+      debugShowCheckedModeBanner: false,
+      home: HomeScreen(github: _github),
     );
   }
-}

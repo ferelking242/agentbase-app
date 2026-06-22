@@ -1,110 +1,136 @@
-class PromptAttachment {
-  final String type; // 'image' | 'audio' | 'file'
-  final String name;
-  final String path;
-  final String? base64Data;
-  final int? sizeBytes;
+import 'dart:convert';
 
-  PromptAttachment({
-    required this.type,
-    required this.name,
-    required this.path,
-    this.base64Data,
-    this.sizeBytes,
-  });
+  class AgentPrompt {
+    final String id, roomId, text, status;
+    final int number;
+    final DateTime? createdAt;
+    final List<PromptAttachment> attachments;
 
-  Map<String, dynamic> toJson() => {
-    'type': type,
-    'name': name,
-    'path': path,
-    'size_bytes': sizeBytes,
-  };
-}
+    const AgentPrompt({
+      required this.id, required this.number, required this.roomId,
+      required this.text, required this.status,
+      this.createdAt, this.attachments = const [],
+    });
 
-class AgentPrompt {
-  final String id;
-  final int number;
-  final String roomId;
-  final String text;
-  final List<PromptAttachment> attachments;
-  final DateTime createdAt;
-  final String status; // 'pending' | 'read' | 'executing' | 'done'
-
-  AgentPrompt({
-    required this.id,
-    required this.number,
-    required this.roomId,
-    required this.text,
-    required this.attachments,
-    required this.createdAt,
-    this.status = 'pending',
-  });
-
-  String toMarkdown() {
-    final buf = StringBuffer();
-    buf.writeln('## Prompt #$number — Room: $roomId');
-    buf.writeln();
-    buf.writeln('**ID:** $id');
-    buf.writeln('**Created:** ${createdAt.toIso8601String()}');
-    buf.writeln('**Status:** $status');
-    buf.writeln();
-    buf.writeln('### Instructions');
-    buf.writeln();
-    buf.writeln(text);
-    buf.writeln();
-    if (attachments.isNotEmpty) {
-      buf.writeln('### Attachments');
-      buf.writeln();
-      for (final att in attachments) {
-        buf.writeln('- **${att.type.toUpperCase()}** `${att.name}`');
-        if (att.base64Data != null) {
-          buf.writeln();
-          buf.writeln('```base64');
-          buf.writeln(att.base64Data);
-          buf.writeln('```');
-          buf.writeln();
+    factory AgentPrompt.fromMarkdown(String content, String filename) {
+      int number = 0;
+      String text = '', status = 'pending', id = '';
+      DateTime? createdAt;
+      final attachments = <PromptAttachment>[];
+      final lines = content.split('\n');
+      if (lines.isNotEmpty && lines[0].startsWith('## ')) {
+        final m = RegExp(r'#(\d+)').firstMatch(lines[0]);
+        if (m != null) number = int.tryParse(m.group(1)!) ?? 0;
+      }
+      for (int i = 1; i < lines.length; i++) {
+        final line = lines[i];
+        if (line.startsWith('**ID:**')) {
+          id = line.replaceFirst('**ID:**', '').trim();
+        } else if (line.startsWith('**Created:**')) {
+          try { createdAt = DateTime.parse(line.replaceFirst('**Created:**', '').trim()); } catch (_) {}
+        } else if (line.startsWith('**Status:**')) {
+          status = line.replaceFirst('**Status:**', '').trim();
+        } else if (line.trim() == '### Instructions') {
+          final buf = StringBuffer();
+          i++;
+          while (i < lines.length && !lines[i].startsWith('###')) {
+            buf.writeln(lines[i]);
+            i++;
+          }
+          text = buf.toString().trim();
+          i--;
+        } else if (line.trim() == '### Attachments') {
+          i++;
+          while (i < lines.length) {
+            final l = lines[i];
+            if (l.startsWith('- **')) {
+              final typeM = RegExp(r'\*\*(\w+)\*\*').firstMatch(l);
+              final nameM = RegExp(r'`([^`]+)`').firstMatch(l);
+              final t = typeM?.group(1)?.toLowerCase() ?? 'file';
+              final n = nameM?.group(1) ?? 'file';
+              final b64 = StringBuffer();
+              i++;
+              if (i < lines.length && lines[i].startsWith('```')) {
+                i++;
+                while (i < lines.length && !lines[i].startsWith('```')) {
+                  b64.write(lines[i].trim());
+                  i++;
+                }
+              }
+              final b64str = b64.toString();
+              attachments.add(PromptAttachment(
+                type: t, name: n, path: '',
+                base64Data: b64str.isNotEmpty ? b64str : null,
+                sizeBytes: b64str.isNotEmpty ? (b64str.length * 3 ~/ 4) : 0,
+              ));
+            }
+            i++;
+          }
         }
       }
-    }
-    buf.writeln();
-    buf.writeln('---');
-    buf.writeln('*Généré par AgentBase Mobile*');
-    return buf.toString();
-  }
-
-  factory AgentPrompt.fromMarkdown(String id, String content) {
-    final lines = content.split('\n');
-    String text = '';
-    String status = 'pending';
-    int number = 0;
-    
-    bool inInstructions = false;
-    final textLines = <String>[];
-    
-    for (final line in lines) {
-      if (line.startsWith('## Prompt #')) {
-        final match = RegExp(r'#(\d+)').firstMatch(line);
-        if (match != null) number = int.tryParse(match.group(1) ?? '0') ?? 0;
-      } else if (line.startsWith('**Status:**')) {
-        status = line.replaceAll('**Status:**', '').trim();
-      } else if (line.startsWith('### Instructions')) {
-        inInstructions = true;
-      } else if (line.startsWith('### Attachments') || line.startsWith('---')) {
-        inInstructions = false;
-      } else if (inInstructions) {
-        textLines.add(line);
+      if (id.isEmpty) {
+        final tsM = RegExp(r'\d{13}').firstMatch(filename);
+        id = tsM?.group(0) ?? filename;
+        if (createdAt == null && tsM != null) {
+          createdAt = DateTime.fromMillisecondsSinceEpoch(int.parse(tsM.group(0)!));
+        }
       }
+      return AgentPrompt(id: id, number: number, roomId: '', text: text, status: status, createdAt: createdAt, attachments: attachments);
     }
-    text = textLines.join('\n').trim();
 
-    return AgentPrompt(
-      id: id,
-      number: number,
-      roomId: '',
-      text: text,
-      attachments: [],
-      createdAt: DateTime.now(),
-      status: status,
-    );
+    String toMarkdown() {
+      final buf = StringBuffer();
+      buf.writeln('## Prompt #$number — Room: $roomId');
+      buf.writeln();
+      buf.writeln('**ID:** $id');
+      buf.writeln('**Created:** ${createdAt?.toIso8601String() ?? DateTime.now().toIso8601String()}');
+      buf.writeln('**Status:** $status');
+      buf.writeln();
+      buf.writeln('### Instructions');
+      buf.writeln();
+      buf.writeln(text);
+      if (attachments.isNotEmpty) {
+        buf.writeln();
+        buf.writeln('### Attachments');
+        for (final a in attachments) {
+          buf.writeln();
+          buf.writeln('- **${a.type.toUpperCase()}** `${a.name}`');
+          if (a.base64Data != null && a.base64Data!.isNotEmpty) {
+            buf.writeln();
+            buf.writeln('```base64');
+            buf.writeln(a.base64Data);
+            buf.writeln('```');
+          }
+        }
+      }
+      return buf.toString();
+    }
   }
-}
+
+  class PromptAttachment {
+    final String type, name, path;
+    final String? base64Data;
+    final int sizeBytes;
+    const PromptAttachment({required this.type, required this.name, required this.path, this.base64Data, required this.sizeBytes});
+  }
+
+  class AgentEntry {
+    final String id, agentName, content, filename;
+    final DateTime? createdAt;
+    const AgentEntry({required this.id, required this.agentName, required this.content, required this.createdAt, required this.filename});
+
+    factory AgentEntry.fromMarkdown(String content, String filename) {
+      String agentName = 'Agent';
+      for (final line in content.split('\n')) {
+        if (line.startsWith('## ')) { agentName = line.substring(3).trim(); break; }
+      }
+      DateTime? ts;
+      final tsM = RegExp(r'\d{13}').firstMatch(filename);
+      if (tsM != null) ts = DateTime.fromMillisecondsSinceEpoch(int.parse(tsM.group(0)!));
+      return AgentEntry(id: filename, agentName: agentName, content: content, createdAt: ts, filename: filename);
+    }
+  }
+
+  abstract class TimelineEntry { DateTime? get timestamp; }
+  class PromptEntry extends TimelineEntry { final AgentPrompt p; PromptEntry(this.p); @override DateTime? get timestamp => p.createdAt; }
+  class AgentEntryItem extends TimelineEntry { final AgentEntry e; AgentEntryItem(this.e); @override DateTime? get timestamp => e.createdAt; }
