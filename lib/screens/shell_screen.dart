@@ -32,6 +32,60 @@ class _ShellScreenState extends State<ShellScreen> {
     setState(() => _prompts.insert(0, p));
   }
 
+  /// Syncs prompts from GitHub repo — merges with local, no duplicates.
+  Future<void> _syncPrompts() async {
+    if (!widget.github.hasPat) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Configure ton PAT dans Parametres d\'abord'),
+        backgroundColor: Color(0xFF3A1010),
+        duration: Duration(seconds: 2),
+      ));
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Row(children: [
+        SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+        SizedBox(width: 12),
+        Text('Synchronisation...'),
+      ]),
+      duration: Duration(seconds: 30),
+      backgroundColor: Color(0xFF1A1A2E),
+    ));
+
+    try {
+      final remote = await widget.github.fetchRemotePrompts();
+      final local = await PrefsService.getPrompts();
+      final localIds = local.map((p) => p.id).toSet();
+      final newOnes = remote.where((p) => !localIds.contains(p.id)).toList();
+
+      for (final p in newOnes) {
+        await PrefsService.addPrompt(p);
+      }
+
+      final merged = await PrefsService.getPrompts();
+      if (mounted) {
+        setState(() => _prompts = merged);
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(newOnes.isEmpty
+              ? 'Deja a jour (${merged.length} prompts)'
+              : '+${newOnes.length} prompt${newOnes.length > 1 ? "s" : ""} synchronise${newOnes.length > 1 ? "s" : ""}'),
+          backgroundColor: const Color(0xFF14532D),
+          duration: const Duration(seconds: 2),
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Erreur sync: $e'),
+          backgroundColor: const Color(0xFF3A1010),
+          duration: const Duration(seconds: 3),
+        ));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -47,6 +101,11 @@ class _ShellScreenState extends State<ShellScreen> {
         centerTitle: true,
         actions: [
           IconButton(
+            icon: const Icon(Icons.sync_rounded, color: Color(0xFFAAAAAA), size: 21),
+            tooltip: 'Synchroniser',
+            onPressed: _syncPrompts,
+          ),
+          IconButton(
             icon: const Icon(Icons.code, color: Color(0xFFAAAAAA), size: 20),
             tooltip: 'GitHub',
             onPressed: () => launchUrl(
@@ -60,6 +119,7 @@ class _ShellScreenState extends State<ShellScreen> {
       ),
       drawer: _Drawer(
         prompts: _prompts,
+        github: widget.github,
         onSettings: () {
           Navigator.pop(context);
           Navigator.push(context, MaterialPageRoute(
@@ -68,6 +128,10 @@ class _ShellScreenState extends State<ShellScreen> {
         onShowPrompts: () {
           Navigator.pop(context);
           _showPromptsSheet();
+        },
+        onSync: () {
+          Navigator.pop(context);
+          _syncPrompts();
         },
         onDeletePrompt: (id) async {
           await PrefsService.deletePrompt(id);
@@ -91,30 +155,55 @@ class _ShellScreenState extends State<ShellScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
       builder: (_) => StatefulBuilder(builder: (ctx, setInner) {
         return DraggableScrollableSheet(
-          initialChildSize: 0.7, maxChildSize: 0.95, minChildSize: 0.4,
+          initialChildSize: 0.72, maxChildSize: 0.95, minChildSize: 0.4,
           expand: false,
           builder: (_, ctrl) => Column(children: [
-            Container(margin: const EdgeInsets.only(top: 10, bottom: 8),
+            Container(
+              margin: const EdgeInsets.only(top: 10, bottom: 8),
               width: 36, height: 4,
               decoration: BoxDecoration(color: const Color(0xFF333333), borderRadius: BorderRadius.circular(2))),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               child: Row(children: [
-                const Text('Prompts sauvegardes',
+                const Text('Prompts',
                   style: TextStyle(color: Color(0xFFECECEC), fontSize: 16, fontWeight: FontWeight.w600)),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(color: const Color(0xFF1A1A2E), borderRadius: BorderRadius.circular(10)),
+                  child: Text('${_prompts.length}', style: const TextStyle(color: Color(0xFF818CF8), fontSize: 11, fontWeight: FontWeight.w700))),
                 const Spacer(),
-                Text('${_prompts.length}', style: const TextStyle(color: Color(0xFF666666), fontSize: 13)),
+                GestureDetector(
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    await _syncPrompts();
+                    _showPromptsSheet();
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1A1A2E),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFF2A2A4A))),
+                    child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(Icons.sync_rounded, size: 13, color: Color(0xFF818CF8)),
+                      SizedBox(width: 5),
+                      Text('Sync', style: TextStyle(color: Color(0xFF818CF8), fontSize: 12, fontWeight: FontWeight.w600)),
+                    ]),
+                  ),
+                ),
               ])),
             const Divider(color: Color(0xFF1A1A1A), height: 0.5),
             Expanded(
               child: _prompts.isEmpty
-                ? const Center(child: Text('Aucun prompt sauvegarde',
+                ? const Center(child: Text('Aucun prompt — appuie sur Sync',
                     style: TextStyle(color: Color(0xFF444444), fontSize: 14)))
                 : ListView.builder(
                     controller: ctrl,
                     itemCount: _prompts.length,
                     itemBuilder: (_, i) => _PromptListItem(
                       prompt: _prompts[i],
+                      github: widget.github,
                       onDelete: () async {
                         await PrefsService.deletePrompt(_prompts[i].id);
                         setState(() => _prompts.removeAt(i));
@@ -131,9 +220,17 @@ class _ShellScreenState extends State<ShellScreen> {
 // ── Drawer ──────────────────────────────────────────────────────────────────
 class _Drawer extends StatelessWidget {
   final List<SavedPrompt> prompts;
-  final VoidCallback onSettings, onShowPrompts;
+  final GitHubService github;
+  final VoidCallback onSettings, onShowPrompts, onSync;
   final void Function(String id) onDeletePrompt;
-  const _Drawer({required this.prompts, required this.onSettings, required this.onShowPrompts, required this.onDeletePrompt});
+  const _Drawer({
+    required this.prompts,
+    required this.github,
+    required this.onSettings,
+    required this.onShowPrompts,
+    required this.onSync,
+    required this.onDeletePrompt,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -145,7 +242,8 @@ class _Drawer extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(16, 52, 16, 16),
           decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFF1A1A1A), width: 0.5))),
           child: Row(children: [
-            Container(width: 32, height: 32,
+            Container(
+              width: 32, height: 32,
               decoration: BoxDecoration(
                 gradient: const LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF4F46E5)]),
                 borderRadius: BorderRadius.circular(9)),
@@ -172,6 +270,12 @@ class _Drawer extends StatelessWidget {
           sel: false,
           badge: prompts.isNotEmpty ? '${prompts.length}' : null,
           onTap: onShowPrompts,
+        ),
+        _NavItem(
+          icon: Icons.sync_rounded,
+          label: 'Synchroniser depuis GitHub',
+          sel: false,
+          onTap: onSync,
         ),
         if (prompts.isNotEmpty) ...[
           const SizedBox(height: 4),
@@ -252,12 +356,41 @@ class _PromptSidebarItem extends StatelessWidget {
 // ── Prompt list item ─────────────────────────────────────────────────────────
 class _PromptListItem extends StatefulWidget {
   final SavedPrompt prompt;
+  final GitHubService github;
   final VoidCallback onDelete;
-  const _PromptListItem({required this.prompt, required this.onDelete});
+  const _PromptListItem({required this.prompt, required this.github, required this.onDelete});
   @override State<_PromptListItem> createState() => _PromptListItemState();
 }
+
 class _PromptListItemState extends State<_PromptListItem> {
-  bool _copied = false;
+  bool _copiedLink = false;
+  bool _copiedContent = false;
+  bool _loadingContent = false;
+
+  Future<void> _copyContent() async {
+    if (_loadingContent) return;
+    setState(() => _loadingContent = true);
+    try {
+      final content = await widget.github.fetchPromptContent(widget.prompt.id);
+      if (!mounted) return;
+      if (content == null) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Impossible de charger le contenu'),
+          backgroundColor: Color(0xFF3A1010),
+          duration: Duration(seconds: 2)));
+        setState(() => _loadingContent = false);
+        return;
+      }
+      await Clipboard.setData(ClipboardData(text: content));
+      setState(() { _loadingContent = false; _copiedContent = true; });
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) setState(() => _copiedContent = false);
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingContent = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Container(
     margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -272,7 +405,7 @@ class _PromptListItemState extends State<_PromptListItem> {
         const SizedBox(width: 8),
         Expanded(child: Text(widget.prompt.name,
           style: const TextStyle(color: Color(0xFFECECEC), fontSize: 14, fontWeight: FontWeight.w600),
-          maxLines: 1, overflow: TextOverflow.ellipsis)),
+          maxLines: 2, overflow: TextOverflow.ellipsis)),
         IconButton(
           icon: const Icon(Icons.delete_outline, size: 16, color: Color(0xFF444444)),
           onPressed: widget.onDelete,
@@ -280,7 +413,10 @@ class _PromptListItemState extends State<_PromptListItem> {
           constraints: const BoxConstraints(minWidth: 28, minHeight: 28)),
       ]),
       const SizedBox(height: 4),
-      Text('ID: ${widget.prompt.id}', style: const TextStyle(color: Color(0xFF444466), fontSize: 10)),
+      Text('ID: ${widget.prompt.id}',
+        style: const TextStyle(color: Color(0xFF444466), fontSize: 10)),
+      Text(_fmtDate(widget.prompt.created),
+        style: const TextStyle(color: Color(0xFF383858), fontSize: 10)),
       const SizedBox(height: 8),
       Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
@@ -289,22 +425,54 @@ class _PromptListItemState extends State<_PromptListItem> {
           style: const TextStyle(color: Color(0xFF5A7A9A), fontSize: 11, fontFamily: 'monospace'),
           maxLines: 2, overflow: TextOverflow.ellipsis)),
       const SizedBox(height: 10),
+      // ── Bouton copier le lien ──
       SizedBox(width: double.infinity,
         child: ElevatedButton.icon(
           onPressed: () async {
             await Clipboard.setData(ClipboardData(text: widget.prompt.link));
-            setState(() => _copied = true);
-            Future.delayed(const Duration(seconds: 2), () { if (mounted) setState(() => _copied = false); });
+            setState(() => _copiedLink = true);
+            Future.delayed(const Duration(seconds: 2), () {
+              if (mounted) setState(() => _copiedLink = false);
+            });
           },
-          icon: Icon(_copied ? Icons.check : Icons.copy, size: 15),
-          label: Text(_copied ? 'Copie !' : 'Copier le lien agent'),
+          icon: Icon(_copiedLink ? Icons.check : Icons.link, size: 15),
+          label: Text(_copiedLink ? 'Lien copie !' : 'Copier le lien'),
           style: ElevatedButton.styleFrom(
-            backgroundColor: _copied ? const Color(0xFF14532D) : const Color(0xFF1A2A3A),
-            foregroundColor: _copied ? const Color(0xFF22C55E) : const Color(0xFF93C5FD),
+            backgroundColor: _copiedLink ? const Color(0xFF14532D) : const Color(0xFF1A2A3A),
+            foregroundColor: _copiedLink ? const Color(0xFF22C55E) : const Color(0xFF93C5FD),
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            elevation: 0),
+        )),
+      const SizedBox(height: 6),
+      // ── Bouton copier le contenu MD ──
+      SizedBox(width: double.infinity,
+        child: ElevatedButton.icon(
+          onPressed: _loadingContent ? null : _copyContent,
+          icon: _loadingContent
+              ? const SizedBox(width: 14, height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF818CF8)))
+              : Icon(_copiedContent ? Icons.check : Icons.content_copy, size: 15),
+          label: Text(_copiedContent
+              ? 'Contenu copie !'
+              : _loadingContent ? 'Chargement...' : 'Copier le contenu MD'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _copiedContent ? const Color(0xFF14532D) : const Color(0xFF1A1A2E),
+            foregroundColor: _copiedContent ? const Color(0xFF22C55E) : const Color(0xFF818CF8),
             padding: const EdgeInsets.symmetric(vertical: 10),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             elevation: 0),
         )),
     ]),
   );
+
+  String _fmtDate(DateTime d) {
+    final now = DateTime.now();
+    final diff = now.difference(d);
+    if (diff.inMinutes < 1) return 'A l\'instant';
+    if (diff.inHours < 1) return 'Il y a ${diff.inMinutes} min';
+    if (diff.inDays < 1) return 'Il y a ${diff.inHours}h';
+    if (diff.inDays < 7) return 'Il y a ${diff.inDays}j';
+    return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+  }
 }
