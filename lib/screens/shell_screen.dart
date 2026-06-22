@@ -35,6 +35,7 @@ class _ShellScreenState extends State<ShellScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFF0E0E16),
       appBar: AppBar(
         elevation: 0,
         scrolledUnderElevation: 0,
