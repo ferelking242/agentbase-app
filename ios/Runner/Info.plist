@@ -32,8 +32,6 @@
         <string>AgentBase utilise le microphone pour les enregistrements audio joints aux prompts.</string>
         <key>UILaunchStoryboardName</key>
         <string>LaunchScreen</string>
-        <key>UIMainStoryboardFile</key>
-        <string>Main</string>
         <key>UISupportedInterfaceOrientations</key>
         <array>
                 <string>UIInterfaceOrientationPortrait</string>
