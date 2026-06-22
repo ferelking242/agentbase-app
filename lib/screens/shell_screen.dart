@@ -4,10 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/github_service.dart';
 import '../services/prefs_service.dart';
 import '../models/saved_prompt.dart';
-import '../theme.dart';
 import 'home_screen.dart';
-import 'rooms_screen.dart';
-import 'problems_screen.dart';
 import 'settings_screen.dart';
 
 class ShellScreen extends StatefulWidget {
@@ -18,9 +15,7 @@ class ShellScreen extends StatefulWidget {
 }
 
 class _ShellScreenState extends State<ShellScreen> {
-  int _page = 0;
   List<SavedPrompt> _prompts = [];
-  bool _promptsLoading = false;
 
   @override
   void initState() {
@@ -33,21 +28,12 @@ class _ShellScreenState extends State<ShellScreen> {
     if (mounted) setState(() => _prompts = list);
   }
 
-  void _goto(int p) { setState(() => _page = p); Navigator.of(context).pop(); }
-
   void _onPromptSaved(SavedPrompt p) {
     setState(() => _prompts.insert(0, p));
   }
 
   @override
   Widget build(BuildContext context) {
-    // Other pages masked — only home active
-    final body = HomeScreen(
-      github: widget.github,
-      onSection: (i) => setState(() => _page = i),
-      onPromptSaved: _onPromptSaved,
-    );
-
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -77,7 +63,8 @@ class _ShellScreenState extends State<ShellScreen> {
         prompts: _prompts,
         onSettings: () {
           Navigator.pop(context);
-          Navigator.push(context, MaterialPageRoute(builder: (_) => SettingsScreen(github: widget.github)));
+          Navigator.push(context, MaterialPageRoute(
+            builder: (_) => SettingsScreen(github: widget.github)));
         },
         onShowPrompts: () {
           Navigator.pop(context);
@@ -85,10 +72,14 @@ class _ShellScreenState extends State<ShellScreen> {
         },
         onDeletePrompt: (id) async {
           await PrefsService.deletePrompt(id);
-          setState(() => _prompts.removeWhere((p) => p.id == id));
+          if (mounted) setState(() => _prompts.removeWhere((p) => p.id == id));
         },
       ),
-      body: body,
+      body: HomeScreen(
+        github: widget.github,
+        onSection: (_) {},
+        onPromptSaved: _onPromptSaved,
+      ),
     );
   }
 
@@ -97,12 +88,11 @@ class _ShellScreenState extends State<ShellScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: const Color(0xFF0D0D0D),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
       builder: (_) => StatefulBuilder(builder: (ctx, setInner) {
         return DraggableScrollableSheet(
-          initialChildSize: 0.7,
-          maxChildSize: 0.95,
-          minChildSize: 0.4,
+          initialChildSize: 0.7, maxChildSize: 0.95, minChildSize: 0.4,
           expand: false,
           builder: (_, ctrl) => Column(children: [
             Container(margin: const EdgeInsets.only(top: 10, bottom: 8),
@@ -114,10 +104,8 @@ class _ShellScreenState extends State<ShellScreen> {
                 const Text('Prompts sauvegardes',
                   style: TextStyle(color: Color(0xFFECECEC), fontSize: 16, fontWeight: FontWeight.w600)),
                 const Spacer(),
-                Text('${_prompts.length}',
-                  style: const TextStyle(color: Color(0xFF666666), fontSize: 13)),
-              ]),
-            ),
+                Text('${_prompts.length}', style: const TextStyle(color: Color(0xFF666666), fontSize: 13)),
+              ])),
             const Divider(color: Color(0xFF1A1A1A), height: 0.5),
             Expanded(
               child: _prompts.isEmpty
@@ -132,10 +120,8 @@ class _ShellScreenState extends State<ShellScreen> {
                         await PrefsService.deletePrompt(_prompts[i].id);
                         setState(() => _prompts.removeAt(i));
                         setInner(() {});
-                      },
-                    ),
-                  ),
-            ),
+                      }),
+                  )),
           ]),
         );
       }),
@@ -156,7 +142,6 @@ class _Drawer extends StatelessWidget {
       backgroundColor: const Color(0xFF0D0D0D),
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       child: Column(children: [
-        // Header
         Container(
           padding: const EdgeInsets.fromLTRB(16, 52, 16, 16),
           decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFF1A1A1A), width: 0.5))),
@@ -171,9 +156,7 @@ class _Drawer extends StatelessWidget {
               Text('AgentBase', style: TextStyle(color: Color(0xFFECECEC), fontSize: 15, fontWeight: FontWeight.w700, letterSpacing: -0.3)),
               Text('ferelking242', style: TextStyle(color: Color(0xFF555555), fontSize: 11)),
             ]),
-          ]),
-        ),
-        // Prompts section
+          ])),
         Padding(
           padding: const EdgeInsets.fromLTRB(14, 16, 14, 6),
           child: Row(children: [
@@ -183,9 +166,7 @@ class _Drawer extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
               decoration: BoxDecoration(color: const Color(0xFF1A1A2E), borderRadius: BorderRadius.circular(10)),
               child: Text('${prompts.length}', style: const TextStyle(color: Color(0xFF818CF8), fontSize: 11, fontWeight: FontWeight.w700))),
-          ]),
-        ),
-        // Prompts button
+          ])),
         _NavItem(
           icon: Icons.list_alt_outlined,
           label: 'Voir tous les prompts',
@@ -193,17 +174,17 @@ class _Drawer extends StatelessWidget {
           badge: prompts.isNotEmpty ? '${prompts.length}' : null,
           onTap: onShowPrompts,
         ),
-        // Recent prompts (last 3)
         if (prompts.isNotEmpty) ...[
           const SizedBox(height: 4),
           ...prompts.take(3).map((p) => _PromptSidebarItem(
             prompt: p,
             onCopy: () async {
               await Clipboard.setData(ClipboardData(text: p.link));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Lien copie !'), duration: Duration(seconds: 1), backgroundColor: Color(0xFF14532D)));
-            },
-          )),
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                content: Text('Lien copie !'),
+                duration: Duration(seconds: 1),
+                backgroundColor: Color(0xFF14532D)));
+            })),
         ],
         const Spacer(),
         const Divider(color: Color(0xFF1A1A1A), height: 0.5),
@@ -269,7 +250,7 @@ class _PromptSidebarItem extends StatelessWidget {
   );
 }
 
-// ── Prompt list item (in bottom sheet) ─────────────────────────────────────
+// ── Prompt list item ─────────────────────────────────────────────────────────
 class _PromptListItem extends StatefulWidget {
   final SavedPrompt prompt;
   final VoidCallback onDelete;
@@ -297,8 +278,7 @@ class _PromptListItemState extends State<_PromptListItem> {
           icon: const Icon(Icons.delete_outline, size: 16, color: Color(0xFF444444)),
           onPressed: widget.onDelete,
           padding: const EdgeInsets.all(4),
-          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-        ),
+          constraints: const BoxConstraints(minWidth: 28, minHeight: 28)),
       ]),
       const SizedBox(height: 4),
       Text('ID: ${widget.prompt.id}', style: const TextStyle(color: Color(0xFF444466), fontSize: 10)),
@@ -324,8 +304,7 @@ class _PromptListItemState extends State<_PromptListItem> {
             foregroundColor: _copied ? const Color(0xFF22C55E) : const Color(0xFF93C5FD),
             padding: const EdgeInsets.symmetric(vertical: 10),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            elevation: 0,
-          ),
+            elevation: 0),
         )),
     ]),
   );
