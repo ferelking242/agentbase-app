@@ -154,15 +154,40 @@ class _FullscreenComposerScreenState extends State<FullscreenComposerScreen> {
     } catch (_) {}
   }
 
+  String _cleanImageName(dynamic img, int index) {
+    final pathParts = (img.path as String).split('/');
+    final pathName = pathParts.isNotEmpty ? pathParts.last : '';
+    for (final candidate in [pathName, img.name as String]) {
+      if (candidate.isNotEmpty && !_isPickerTempName(candidate)) return candidate;
+    }
+    final ext = _extractExt(img.name as String);
+    final now = DateTime.now();
+    return 'photo_${now.year}${now.month.toString().padLeft(2,'0')}${now.day.toString().padLeft(2,'0')}_${now.hour.toString().padLeft(2,'0')}${now.minute.toString().padLeft(2,'0')}${now.second.toString().padLeft(2,'0')}${index > 0 ? "_$index" : ""}$ext';
+  }
+
+  bool _isPickerTempName(String name) {
+    final lower = name.toLowerCase();
+    return lower.startsWith('image_picker_') ||
+        lower.startsWith('picker_') ||
+        RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}').hasMatch(lower);
+  }
+
+  String _extractExt(String name) {
+    final dot = name.lastIndexOf('.');
+    if (dot > 0 && dot < name.length - 1) return name.substring(dot).toLowerCase();
+    return '.jpg';
+  }
+
   Future<void> _pickFromGallery() async {
     try {
       final imgs = await ImagePicker().pickMultiImage(imageQuality: 90);
       if (imgs.isEmpty) return;
-      for (final img in imgs) {
+      for (int i = 0; i < imgs.length; i++) {
+        final img = imgs[i];
         final bytes = await img.readAsBytes();
         if (mounted) {
           setState(() => _files.insert(0, AttachedFile(
-            name: img.name, bytes: bytes, isImage: true)));
+            name: _cleanImageName(img, i), bytes: bytes, isImage: true)));
         }
       }
     } catch (_) {}
