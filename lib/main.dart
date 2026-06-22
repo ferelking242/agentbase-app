@@ -11,8 +11,8 @@ void main() {
     await github.init();
     runApp(AgentBaseApp(github: github));
   }, (error, stack) {
-    debugPrint('AgentBase fatal: $error
-$stack');
+    debugPrint('AgentBase fatal error: $error');
+    debugPrint('$stack');
   });
 }
 
