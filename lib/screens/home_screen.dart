@@ -152,15 +152,46 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (_) {}
   }
 
+  /// Extracts a clean filename from an XFile, stripping the iOS image_picker UUID prefix.
+  String _cleanImageName(dynamic img, int index) {
+    // Try path-based name first (sometimes the real filename is in the path)
+    final pathParts = (img.path as String).split('/');
+    final pathName = pathParts.isNotEmpty ? pathParts.last : '';
+    // Use path-based name if it looks like a real file (not a UUID temp file)
+    for (final candidate in [pathName, img.name as String]) {
+      if (candidate.isNotEmpty && !_isPickerTempName(candidate)) {
+        return candidate;
+      }
+    }
+    // Fallback: generate a clean sequential name
+    final ext = _extractExt(img.name as String);
+    final now = DateTime.now();
+    return 'photo_${now.year}${now.month.toString().padLeft(2,'0')}${now.day.toString().padLeft(2,'0')}_${now.hour.toString().padLeft(2,'0')}${now.minute.toString().padLeft(2,'0')}${now.second.toString().padLeft(2,'0')}${index > 0 ? "_$index" : ""}$ext';
+  }
+
+  bool _isPickerTempName(String name) {
+    final lower = name.toLowerCase();
+    return lower.startsWith('image_picker_') ||
+        lower.startsWith('picker_') ||
+        RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}').hasMatch(lower);
+  }
+
+  String _extractExt(String name) {
+    final dot = name.lastIndexOf('.');
+    if (dot > 0 && dot < name.length - 1) return name.substring(dot).toLowerCase();
+    return '.jpg';
+  }
+
   Future<void> _pickFromGallery() async {
     try {
       final imgs = await ImagePicker().pickMultiImage(imageQuality: 90);
       if (imgs.isEmpty) return;
-      for (final img in imgs) {
+      for (int i = 0; i < imgs.length; i++) {
+        final img = imgs[i];
         final bytes = await img.readAsBytes();
         if (mounted) {
           setState(() => _files.insert(0, AttachedFile(
-            name: img.name,
+            name: _cleanImageName(img, i),
             bytes: bytes,
             isImage: true,
           )));
