@@ -35,9 +35,7 @@ class _ShellScreenState extends State<ShellScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
       appBar: AppBar(
-        backgroundColor: Colors.black,
         elevation: 0,
         scrolledUnderElevation: 0,
         leading: Builder(builder: (ctx) => IconButton(
