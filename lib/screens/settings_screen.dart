@@ -16,10 +16,10 @@ import 'package:flutter/material.dart';
     Future<void> _load() async { final p=await PrefsService.getPat(); if(p!=null&&mounted){_patCtrl.text=p;setState((){});} }
     Future<void> _validate() async {
       final p=_patCtrl.text.trim(); if(p.isEmpty)return;
-      setState(()=>{_validating=true,_valid=null});
+      setState(() { _validating = true; _valid = null; });
       widget.github.setPat(p); await PrefsService.savePat(p);
       final ok=await widget.github.validatePat();
-      if(mounted) setState(()=>{_validating=false,_valid=ok});
+      if (mounted) setState(() { _validating = false; _valid = ok; });
     }
     Future<void> _clear() async { _patCtrl.clear(); widget.github.setPat(''); await PrefsService.clearPat(); if(mounted)setState(()=>_valid=null); }
     @override

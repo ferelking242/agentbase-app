@@ -184,7 +184,7 @@ import 'dart:convert';
                 SizedBox(width: 6),
                 Text('Voir sur GitHub', style: TextStyle(color: kText2, fontSize: 12, fontWeight: FontWeight.w500)),
                 SizedBox(width: 4),
-                Icon(Icons.open_in_new, size: 11, color: kMuted)),
+                Icon(Icons.open_in_new, size: 11, color: kMuted),
               ])),
           ),
           const SizedBox(height: 16),
