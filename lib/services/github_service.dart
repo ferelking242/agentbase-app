@@ -110,7 +110,13 @@ class GitHubService {
 
   /// Saves a direct prompt (text + attachments) to prompts/{id}.md
   /// Returns the raw GitHub URL agents can read directly.
-  Future<String> pushDirectPrompt(String id, String text, List<AttachedFile> files) async {
+  Future<String> pushDirectPrompt(
+    String id,
+    String text,
+    List<AttachedFile> files, {
+    Room? room,
+    String? roomContext,
+  }) async {
     if (_pat.isEmpty) throw Exception('PAT non configure — va dans Parametres');
 
     // 1. Upload each attachment
@@ -141,8 +147,19 @@ class GitHubService {
       ..writeln('# Prompt $id')
       ..writeln()
       ..writeln('**ID:** $id')
-      ..writeln('**Created:** $now')
-      ..writeln()
+      ..writeln('**Created:** $now');
+    if (room != null) {
+      sb..writeln('**Room:** ${room.name} (`${room.id}`)');
+    }
+    sb..writeln();
+    if (room != null && roomContext != null && roomContext.trim().isNotEmpty) {
+      sb
+        ..writeln('## Contexte du projet — ${room.name}')
+        ..writeln()
+        ..writeln(roomContext.trim())
+        ..writeln();
+    }
+    sb
       ..writeln('## Contenu')
       ..writeln()
       ..writeln(text.isNotEmpty ? text : '_(aucun texte)_');
