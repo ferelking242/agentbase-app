@@ -42,6 +42,11 @@ class AgentBaseApp extends StatelessWidget {
     title: 'AgentBase',
     theme: buildTheme(),
     debugShowCheckedModeBanner: false,
-    home: ShellScreen(github: github),
+    home: Scaffold(
+      backgroundColor: Colors.green,
+      body: const Center(
+        child: Text('FLUTTER MARCHE', style: TextStyle(color: Colors.black, fontSize: 36, fontWeight: FontWeight.bold)),
+      ),
+    ),
   );
 }
