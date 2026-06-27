@@ -294,7 +294,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showImageFullscreen(Uint8List bytes, String name) {
     showDialog(
       context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.95),
+      barrierColor: Colors.black.withOpacity(0.95),
       builder: (_) => Scaffold(
         backgroundColor: Colors.black,
         body: SafeArea(child: Column(children: [
@@ -563,7 +563,7 @@ class _HomeScreenState extends State<HomeScreen> {
             onTap: () { Navigator.pop(context); _renameFile(i); },
           ),
           ListTile(
-            leading: Container(width: 36, height: 36, decoration: BoxDecoration(color: kRedSub.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(8)), child: const Icon(Icons.delete_outline, size: 18, color: kRed)),
+            leading: Container(width: 36, height: 36, decoration: BoxDecoration(color: kRedSub.withOpacity(0.5), borderRadius: BorderRadius.circular(8)), child: const Icon(Icons.delete_outline, size: 18, color: kRed)),
             title: Text('Supprimer', style: GoogleFonts.inter(color: kRed, fontSize: 14)),
             onTap: () { Navigator.pop(context); setState(() => _files.removeAt(i)); },
           ),
@@ -615,7 +615,7 @@ class _FileChip extends StatelessWidget {
           onTap: onRemove,
           child: Container(
             width: 18, height: 18,
-            decoration: BoxDecoration(color: kBg.withValues(alpha: 0.85), shape: BoxShape.circle, border: Border.all(color: kBorder, width: 0.5)),
+            decoration: BoxDecoration(color: kBg.withOpacity(0.85), shape: BoxShape.circle, border: Border.all(color: kBorder, width: 0.5)),
             child: const Icon(Icons.close, size: 11, color: kText),
           ),
         ),
@@ -818,7 +818,7 @@ class _UserBubble extends StatelessWidget {
           if (msg.room != null) Padding(
             padding: const EdgeInsets.only(top: 3),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Icon(Icons.workspaces_outlined, size: 10, color: kAccentMid.withValues(alpha: 0.7)),
+              Icon(Icons.workspaces_outlined, size: 10, color: kAccentMid.withOpacity(0.7)),
               const SizedBox(width: 3),
               Text(msg.room!.name, style: GoogleFonts.inter(color: kMuted2, fontSize: 10.5)),
             ]),
@@ -844,7 +844,7 @@ class _AgentBubble extends StatelessWidget {
         padding: const EdgeInsets.only(bottom: 12),
         child: AppCard(
           padding: const EdgeInsets.all(12),
-          color: kGreenSub.withValues(alpha: 0.5),
+          color: kGreenSub.withOpacity(0.5),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
               const Icon(Icons.check_circle_outline, size: 15, color: kGreen),
@@ -876,12 +876,12 @@ class _AgentBubble extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: isError ? kRedSub.withValues(alpha: 0.6) : kCard,
+              color: isError ? kRedSub.withOpacity(0.6) : kCard,
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(3), topRight: Radius.circular(14),
                 bottomLeft: Radius.circular(14), bottomRight: Radius.circular(14),
               ),
-              border: Border.all(color: isError ? kRed.withValues(alpha: 0.3) : kBorder, width: 0.5),
+              border: Border.all(color: isError ? kRed.withOpacity(0.3) : kBorder, width: 0.5),
             ),
             child: Text(msg.text, style: GoogleFonts.inter(color: isError ? kRed : kText2, fontSize: 13.5, height: 1.5)),
           ),
@@ -913,7 +913,7 @@ class _TypingDotsState extends State<_TypingDots> with SingleTickerProviderState
         return Container(
           margin: const EdgeInsets.only(right: 4),
           width: 7, height: 7,
-          decoration: BoxDecoration(color: kMuted2.withValues(alpha: opacity), shape: BoxShape.circle),
+          decoration: BoxDecoration(color: kMuted2.withOpacity(opacity), shape: BoxShape.circle),
         );
       },
     ))),
