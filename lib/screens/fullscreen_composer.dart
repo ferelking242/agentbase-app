@@ -11,6 +11,8 @@ import '../models/room.dart';
 import '../theme.dart';
 import '../widgets/app_components.dart';
 import '../widgets/send_sheet.dart';
+import 'home_screen.dart';
+import 'image_edit_screen.dart';
 
 class FullscreenComposerScreen extends StatefulWidget {
   final String initialText;
@@ -20,8 +22,8 @@ class FullscreenComposerScreen extends StatefulWidget {
 
   const FullscreenComposerScreen({
     super.key,
-    required this.initialText,
-    required this.initialFiles,
+    this.initialText = '',
+    this.initialFiles = const [],
     required this.github,
     this.preloadedRooms = const [],
   });
@@ -32,8 +34,9 @@ class FullscreenComposerScreen extends StatefulWidget {
 
 class _FullscreenComposerScreenState extends State<FullscreenComposerScreen> {
   late final TextEditingController _ctrl;
+  final FocusNode _focus = FocusNode();
   late List<AttachedFile> _files;
-  bool _saving = false;
+  bool _sending = false;
   String? _mentionQuery;
   List<Room> _rooms = [];
 
@@ -41,12 +44,9 @@ class _FullscreenComposerScreenState extends State<FullscreenComposerScreen> {
   void initState() {
     super.initState();
     _ctrl = TextEditingController(text: widget.initialText);
-    _files = List<AttachedFile>.from(widget.initialFiles);
+    _files = List.from(widget.initialFiles);
     _rooms = List.from(widget.preloadedRooms);
     _ctrl.addListener(_onCtrlChange);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _ctrl.selection = TextSelection.collapsed(offset: _ctrl.text.length);
-    });
     if (_rooms.isEmpty) _loadRooms();
   }
 
@@ -54,6 +54,7 @@ class _FullscreenComposerScreenState extends State<FullscreenComposerScreen> {
   void dispose() {
     _ctrl.removeListener(_onCtrlChange);
     _ctrl.dispose();
+    _focus.dispose();
     super.dispose();
   }
 
@@ -66,12 +67,12 @@ class _FullscreenComposerScreenState extends State<FullscreenComposerScreen> {
 
   void _onCtrlChange() {
     final pos = _ctrl.selection.baseOffset;
-    if (!_ctrl.selection.isValid || pos < 0 || pos > _ctrl.text.length) {
+    if (!_ctrl.selection.isValid || pos < 0) {
       if (_mentionQuery != null) setState(() => _mentionQuery = null);
       return;
     }
-    final before = _ctrl.text.substring(0, pos);
-    final match = RegExp(r'@(\w*)$').firstMatch(before);
+    final before = _ctrl.text.substring(0, pos.clamp(0, _ctrl.text.length));
+    final match  = RegExp(r'@(\w*)$').firstMatch(before);
     final q = match?.group(1);
     if (q != _mentionQuery) setState(() => _mentionQuery = q);
   }
@@ -86,30 +87,55 @@ class _FullscreenComposerScreenState extends State<FullscreenComposerScreen> {
     final pos = _ctrl.selection.baseOffset;
     if (pos < 0) return;
     final before = _ctrl.text.substring(0, pos);
-    final after = _ctrl.text.substring(pos);
-    final match = RegExp(r'@(\w*)$').firstMatch(before);
-    final mention = '@${f.name.replaceAll(' ', '_')}';
+    final after  = _ctrl.text.substring(pos);
+    final match  = RegExp(r'@(\w*)$').firstMatch(before);
+    final mention = '@${f.name.replaceAll(' ', '_').replaceAll('.', '_')}';
     final newBefore = match != null ? before.substring(0, match.start) + mention : before + mention;
-    _ctrl.value = TextEditingValue(text: newBefore + after, selection: TextSelection.collapsed(offset: newBefore.length));
+    _ctrl.value = TextEditingValue(
+      text: newBefore + after,
+      selection: TextSelection.collapsed(offset: newBefore.length),
+    );
     setState(() => _mentionQuery = null);
   }
 
-  void _showAttachMenu() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: kCard,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (_) => SafeArea(
-        top: false,
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const AppDragHandle(),
-          _AttachTile(icon: Icons.folder_outlined, title: 'Fichiers', subtitle: 'Tout type de fichier', onTap: () { Navigator.pop(context); _pickFiles(); }),
-          _AttachTile(icon: Icons.photo_library_outlined, title: 'Galerie', subtitle: 'Photos et images', onTap: () { Navigator.pop(context); _pickFromGallery(); }),
-          const SizedBox(height: 8),
-        ]),
-      ),
-    );
+  // ── Name cleaning: img.name first, fallback to path ───────────────────────
+  String _cleanImageName(dynamic img, int index) {
+    // Prioritize img.name (original filename from gallery)
+    final imgName = img.name as String? ?? '';
+    final pathParts = (img.path as String).split('/');
+    final pathName = pathParts.isNotEmpty ? pathParts.last : '';
+
+    // Check img.name first — it preserves the original gallery filename
+    for (final candidate in [imgName, pathName]) {
+      if (candidate.isEmpty) continue;
+      if (_isTempName(candidate)) continue;
+      return _sanitizeName(candidate);
+    }
+    return _stampName(index);
   }
+
+  bool _isTempName(String n) {
+    final l = n.toLowerCase();
+    return l.isEmpty ||
+        l.startsWith('image_picker_') ||
+        l.startsWith('picker_') ||
+        l.startsWith('scaled_') ||
+        l.startsWith('img_') ||
+        RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}').hasMatch(l) ||
+        RegExp(r'^\d{10,}').hasMatch(l.replaceAll(RegExp(r'\.\w+$'), ''));
+  }
+
+  String _sanitizeName(String n) {
+    return n.replaceAll(' ', '_').replaceAll(RegExp(r'[^\w.\-]'), '');
+  }
+
+  String _stampName(int idx) {
+    final t = DateTime.now();
+    final s = idx > 0 ? '_$idx' : '';
+    return 'photo_${t.year}${_p(t.month)}${_p(t.day)}_${_p(t.hour)}${_p(t.minute)}${_p(t.second)}$s.jpg';
+  }
+
+  String _p(int n) => n.toString().padLeft(2, '0');
 
   Future<void> _pickFiles() async {
     try {
@@ -117,38 +143,15 @@ class _FullscreenComposerScreenState extends State<FullscreenComposerScreen> {
       if (res == null) return;
       setState(() {
         for (final f in res.files) {
-          if (f.bytes != null) {
-            final ext = f.name.toLowerCase();
-            _files.insert(0, AttachedFile(
-              name: f.name, bytes: f.bytes!,
-              isImage: ext.endsWith('.png') || ext.endsWith('.jpg') || ext.endsWith('.jpeg') || ext.endsWith('.gif') || ext.endsWith('.webp'),
-            ));
-          }
+          if (f.bytes == null) continue;
+          final n = f.name.toLowerCase();
+          _files.insert(0, AttachedFile(
+            name: f.name, bytes: f.bytes!,
+            isImage: n.endsWith('.png') || n.endsWith('.jpg') || n.endsWith('.jpeg') || n.endsWith('.gif') || n.endsWith('.webp'),
+          ));
         }
       });
     } catch (_) {}
-  }
-
-  String _cleanImageName(dynamic img, int index) {
-    final pathParts = (img.path as String).split('/');
-    final pathName = pathParts.isNotEmpty ? pathParts.last : '';
-    for (final candidate in [pathName, img.name as String]) {
-      if (candidate.isNotEmpty && !_isPickerTempName(candidate)) return candidate;
-    }
-    final ext = _extractExt(img.name as String);
-    final now = DateTime.now();
-    return 'photo_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}${index > 0 ? "_$index" : ""}$ext';
-  }
-
-  bool _isPickerTempName(String name) {
-    final lower = name.toLowerCase();
-    return lower.startsWith('image_picker_') || lower.startsWith('picker_') || RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}').hasMatch(lower);
-  }
-
-  String _extractExt(String name) {
-    final dot = name.lastIndexOf('.');
-    if (dot > 0 && dot < name.length - 1) return name.substring(dot).toLowerCase();
-    return '.jpg';
   }
 
   Future<void> _pickFromGallery() async {
@@ -157,37 +160,29 @@ class _FullscreenComposerScreenState extends State<FullscreenComposerScreen> {
       if (imgs.isEmpty) return;
       for (int i = 0; i < imgs.length; i++) {
         final bytes = await imgs[i].readAsBytes();
-        if (mounted) setState(() => _files.insert(0, AttachedFile(name: _cleanImageName(imgs[i], i), bytes: bytes, isImage: true)));
+        final name = _cleanImageName(imgs[i], i);
+        if (mounted) setState(() => _files.insert(0, AttachedFile(name: name, bytes: bytes, isImage: true)));
       }
     } catch (_) {}
   }
 
-  void _showImageFullscreen(Uint8List bytes, String name) {
-    showDialog(
-      context: context,
-      barrierColor: Colors.black.withOpacity(0.95),
-      builder: (_) => Scaffold(
-        backgroundColor: Colors.black,
-        body: SafeArea(child: Column(children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
-            child: Row(children: [
-              const Spacer(),
-              IconButton(icon: const Icon(Icons.close, color: Colors.white60), onPressed: () => Navigator.pop(_)),
-            ]),
-          ),
-          Expanded(child: InteractiveViewer(minScale: 0.5, maxScale: 5, child: Center(child: Image.memory(bytes)))),
-          Padding(padding: const EdgeInsets.all(12), child: Text(name, style: GoogleFonts.inter(color: Colors.white38, fontSize: 12))),
-        ])),
-      ),
+  Future<void> _editImage(int i) async {
+    final f = _files[i];
+    if (!f.isImage) return;
+    final result = await Navigator.push<Uint8List?>(
+      context,
+      MaterialPageRoute(builder: (_) => ImageEditScreen(bytes: f.bytes, name: f.name)),
     );
+    if (result != null && mounted) {
+      setState(() => _files[i] = AttachedFile(name: f.name, bytes: result, isImage: true));
+    }
   }
 
   Future<void> _renameFile(int i) async {
-    final f = _files[i];
+    final f   = _files[i];
     final dot = f.name.lastIndexOf('.');
     final nameOnly = dot > 0 ? f.name.substring(0, dot) : f.name;
-    final ext = dot > 0 ? f.name.substring(dot) : '';
+    final ext      = dot > 0 ? f.name.substring(dot) : '';
     final ctrl = TextEditingController(text: nameOnly);
     final newName = await showDialog<String>(
       context: context,
@@ -195,7 +190,7 @@ class _FullscreenComposerScreenState extends State<FullscreenComposerScreen> {
         backgroundColor: kCard,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: const BorderSide(color: kBorder, width: 0.5)),
         title: Text('Renommer', style: GoogleFonts.inter(color: kText, fontSize: 15, fontWeight: FontWeight.w600)),
-        content: AppInput(controller: ctrl, autofocus: true, suffixText: ext, hint: 'Nom du fichier', onSubmitted: (v) => Navigator.pop(_, v.trim())),
+        content: AppInput(controller: ctrl, autofocus: true, suffixText: ext, hint: 'Nom', onSubmitted: (v) => Navigator.pop(_, v.trim())),
         actions: [
           TextButton(onPressed: () => Navigator.pop(_), child: Text('Annuler', style: GoogleFonts.inter(color: kMuted))),
           AppButton(label: 'OK', onTap: () => Navigator.pop(_, ctrl.text.trim()), padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8)),
@@ -213,7 +208,7 @@ class _FullscreenComposerScreenState extends State<FullscreenComposerScreen> {
     if (data?.text == null || data!.text!.isEmpty) return;
     final pos = _ctrl.selection.isValid ? _ctrl.selection.baseOffset : _ctrl.text.length;
     final before = _ctrl.text.substring(0, pos);
-    final after = _ctrl.text.substring(pos);
+    final after  = _ctrl.text.substring(pos);
     _ctrl.value = TextEditingValue(
       text: before + data.text! + after,
       selection: TextSelection.collapsed(offset: pos + data.text!.length),
@@ -225,28 +220,66 @@ class _FullscreenComposerScreenState extends State<FullscreenComposerScreen> {
     if (_ctrl.text.trim().isEmpty && _files.isEmpty) return;
     final defaultName = _ctrl.text.trim().split(' ').take(5).join(' ');
     final result = await showModalBottomSheet<SendResult>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
       builder: (_) => SendSheet(defaultName: defaultName, preloadedRooms: _rooms, github: widget.github),
     );
     if (result == null) return;
-    setState(() => _saving = true);
+
+    setState(() => _sending = true);
     try {
-      final id = DateTime.now().millisecondsSinceEpoch.toString();
+      final text  = _ctrl.text;
+      final files = List<AttachedFile>.from(_files);
+      final id    = DateTime.now().millisecondsSinceEpoch.toString();
       String? roomContext;
       if (result.room != null) roomContext = await widget.github.fetchContext(result.room!.id);
-      final link = await widget.github.pushDirectPrompt(id, _ctrl.text, _files, room: result.room, roomContext: roomContext);
-      final name = result.name.isNotEmpty ? result.name : defaultName;
+      final link   = await widget.github.pushDirectPrompt(id, text, files, room: result.room, roomContext: roomContext);
+      final name   = result.name.isNotEmpty ? result.name : defaultName;
       final prompt = SavedPrompt(id: id, name: name, link: link, created: DateTime.now());
-      final saved = await PrefsService.addPrompt(prompt);
+      final saved  = await PrefsService.addPrompt(prompt);
       if (!mounted) return;
       Navigator.pop(context, saved);
     } catch (e) {
-      if (!mounted) return;
-      setState(() => _saving = false);
-      showAppSnack(context, 'Erreur: ${e.toString().replaceAll("Exception: ", "")}', isError: true);
+      setState(() => _sending = false);
+      if (mounted) showAppSnack(context, e.toString().replaceAll('Exception: ', ''), isError: true);
     }
+  }
+
+  void _showFileMenu(int i) {
+    final f = _files[i];
+    showModalBottomSheet(
+      context: context, backgroundColor: kCard,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (_) => SafeArea(top: false, child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const AppDragHandle(),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+          child: Row(children: [
+            const Icon(Icons.insert_drive_file_outlined, size: 16, color: kMuted2),
+            const SizedBox(width: 8),
+            Expanded(child: Text(f.name, style: GoogleFonts.inter(color: kText, fontSize: 14, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis)),
+          ]),
+        ),
+        const AppDivider(),
+        if (f.isImage)
+          ListTile(
+            leading: Container(width: 36, height: 36, decoration: BoxDecoration(color: kAccentSub, borderRadius: BorderRadius.circular(8)), child: const Icon(Icons.edit_outlined, size: 18, color: kAccentMid)),
+            title: Text('Éditer l\'image', style: GoogleFonts.inter(color: kText, fontSize: 14)),
+            subtitle: Text('Luminosité · Contraste · Dessin', style: GoogleFonts.inter(color: kMuted2, fontSize: 11.5)),
+            onTap: () { Navigator.pop(context); _editImage(i); },
+          ),
+        ListTile(
+          leading: Container(width: 36, height: 36, decoration: BoxDecoration(color: kCard2, borderRadius: BorderRadius.circular(8)), child: const Icon(Icons.drive_file_rename_outline, size: 18, color: kMuted)),
+          title: Text('Renommer', style: GoogleFonts.inter(color: kText, fontSize: 14)),
+          onTap: () { Navigator.pop(context); _renameFile(i); },
+        ),
+        ListTile(
+          leading: Container(width: 36, height: 36, decoration: BoxDecoration(color: kRedSub.withOpacity(0.5), borderRadius: BorderRadius.circular(8)), child: const Icon(Icons.delete_outline, size: 18, color: kRed)),
+          title: Text('Supprimer', style: GoogleFonts.inter(color: kRed, fontSize: 14)),
+          onTap: () { Navigator.pop(context); setState(() => _files.removeAt(i)); },
+        ),
+        const SizedBox(height: 8),
+      ])),
+    );
   }
 
   @override
@@ -256,69 +289,57 @@ class _FullscreenComposerScreenState extends State<FullscreenComposerScreen> {
     return Scaffold(
       backgroundColor: kBg,
       body: SafeArea(child: Column(children: [
-        // Top bar
+        // Header
         Container(
-          padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
           decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: kBorder, width: 0.5))),
           child: Row(children: [
-            _ToolBtn(icon: Icons.add, onTap: _showAttachMenu, tooltip: 'Joindre'),
-            _ToolBtn(icon: Icons.content_paste_rounded, onTap: _paste, tooltip: 'Coller'),
-            const Spacer(),
-            Text(
-              '${_ctrl.text.length} car.',
-              style: GoogleFonts.inter(color: kMuted2, fontSize: 11.5),
-            ),
-            const SizedBox(width: 8),
             GestureDetector(
-              onTap: () => Navigator.pop(context, null),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                decoration: BoxDecoration(color: kCard, borderRadius: BorderRadius.circular(8), border: Border.all(color: kBorder, width: 0.5)),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.fullscreen_exit_rounded, size: 15, color: kMuted2),
-                  const SizedBox(width: 5),
-                  Text('Réduire', style: GoogleFonts.inter(color: kMuted2, fontSize: 12.5)),
-                ]),
-              ),
+              onTap: () => Navigator.pop(context),
+              child: Container(width: 34, height: 34, decoration: BoxDecoration(color: kCard, borderRadius: BorderRadius.circular(8), border: Border.all(color: kBorder, width: 0.5)),
+                child: const Icon(Icons.close, size: 17, color: kMuted)),
             ),
+            const SizedBox(width: 12),
+            Text('Composer', style: GoogleFonts.inter(color: kText, fontSize: 15, fontWeight: FontWeight.w600, letterSpacing: -0.3)),
+            const Spacer(),
+            _ToolBtn(icon: Icons.add_photo_alternate_outlined, onTap: _pickFromGallery, tooltip: 'Image'),
+            _ToolBtn(icon: Icons.attach_file, onTap: _pickFiles, tooltip: 'Fichier'),
+            _ToolBtn(icon: Icons.content_paste_rounded, onTap: _paste, tooltip: 'Coller'),
           ]),
         ),
 
-        // Files
-        if (_files.isNotEmpty)
+        // Images preview strip (non-text files on top)
+        if (_files.any((f) => f.isImage))
           Container(
-            height: 88,
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 4),
+            height: 90,
+            color: kCard.withOpacity(0.4),
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
-              itemCount: _files.length,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              itemCount: _files.where((f) => f.isImage).length,
               separatorBuilder: (_, __) => const SizedBox(width: 8),
               itemBuilder: (_, i) {
-                final f = _files[i];
+                final imgFiles = _files.where((f) => f.isImage).toList();
+                final f = imgFiles[i];
+                final idx = _files.indexOf(f);
                 return GestureDetector(
-                  onTap: f.isImage ? () => _showImageFullscreen(f.bytes, f.name) : null,
-                  onLongPress: () => _renameFile(i),
+                  onTap: () => _showImagePreview(f.bytes, f.name),
+                  onLongPress: () => _showFileMenu(idx),
                   child: Stack(children: [
-                    f.isImage
-                        ? ClipRRect(borderRadius: BorderRadius.circular(10), child: Image.memory(f.bytes, width: 80, height: 80, fit: BoxFit.cover))
-                        : Container(
-                            width: 80, height: 80,
-                            decoration: BoxDecoration(color: kCard, borderRadius: BorderRadius.circular(10), border: Border.all(color: kBorder, width: 0.5)),
-                            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                              const Icon(Icons.insert_drive_file_outlined, color: kAccentMid, size: 26),
-                              const SizedBox(height: 4),
-                              Padding(padding: const EdgeInsets.symmetric(horizontal: 4),
-                                child: Text(f.name, style: GoogleFonts.inter(color: kMuted2, fontSize: 9), maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center)),
-                            ])),
+                    ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.memory(f.bytes, width: 74, height: 74, fit: BoxFit.cover)),
                     Positioned(
-                      top: 3, right: 3,
+                      bottom: 2, left: 2,
+                      child: Container(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                        decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(4)),
+                        child: const Icon(Icons.edit, size: 9, color: Colors.white70)),
+                    ),
+                    Positioned(
+                      top: 2, right: 2,
                       child: GestureDetector(
-                        onTap: () => setState(() => _files.removeAt(i)),
-                        child: Container(
-                          width: 18, height: 18,
-                          decoration: BoxDecoration(color: kBg.withOpacity(0.88), shape: BoxShape.circle, border: Border.all(color: kBorder, width: 0.5)),
-                          child: const Icon(Icons.close, size: 11, color: kText),
-                        ),
+                        onTap: () => setState(() => _files.removeAt(idx)),
+                        child: Container(width: 18, height: 18,
+                          decoration: BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                          child: const Icon(Icons.close, size: 11, color: Colors.white70)),
                       ),
                     ),
                   ]),
@@ -327,138 +348,111 @@ class _FullscreenComposerScreenState extends State<FullscreenComposerScreen> {
             ),
           ),
 
-        // Text area
-        Expanded(
-          child: _saving
-              ? const AppLoadingIndicator()
-              : Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-                  child: TextField(
-                    controller: _ctrl,
-                    maxLines: null,
-                    expands: true,
-                    autofocus: true,
-                    textAlignVertical: TextAlignVertical.top,
-                    onChanged: (_) => setState(() {}),
-                    style: GoogleFonts.inter(color: kText, fontSize: 16, height: 1.65),
-                    cursorColor: kAccent,
-                    cursorWidth: 1.5,
-                    decoration: InputDecoration(
-                      hintText: 'Écris ton prompt ici… ou tape @ pour mentionner un fichier',
-                      hintStyle: GoogleFonts.inter(color: kMuted2, fontSize: 15, height: 1.6),
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.zero,
-                      isDense: true,
-                    ),
-                  ),
-                ),
-        ),
+        // Non-image file chips
+        if (_files.any((f) => !f.isImage))
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: Wrap(spacing: 6, runSpacing: 6, children: _files.where((f) => !f.isImage).map((f) {
+              final idx = _files.indexOf(f);
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(color: kCard, borderRadius: BorderRadius.circular(8), border: Border.all(color: kBorder, width: 0.5)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.attach_file, size: 14, color: kAccentMid),
+                  const SizedBox(width: 4),
+                  Text(f.name, style: GoogleFonts.inter(color: kMuted, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  const SizedBox(width: 4),
+                  GestureDetector(onTap: () => setState(() => _files.removeAt(idx)), child: const Icon(Icons.close, size: 13, color: kMuted2)),
+                ]),
+              );
+            }).toList()),
+          ),
 
         // Mention overlay
         if (_mentionQuery != null && mentions.isNotEmpty)
           Container(
-            constraints: const BoxConstraints(maxHeight: 160),
-            decoration: const BoxDecoration(
-              color: kCard,
-              border: Border(top: BorderSide(color: kBorder, width: 0.5), bottom: BorderSide(color: kBorder, width: 0.5)),
-            ),
+            constraints: const BoxConstraints(maxHeight: 150),
+            decoration: const BoxDecoration(color: kCard, border: Border(top: BorderSide(color: kBorder, width: 0.5))),
             child: ListView.builder(
-              shrinkWrap: true,
-              padding: EdgeInsets.zero,
-              itemCount: mentions.length,
+              shrinkWrap: true, padding: EdgeInsets.zero, itemCount: mentions.length,
               itemBuilder: (_, i) {
                 final f = mentions[i];
                 return ListTile(
-                  dense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                  dense: true, contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
                   leading: f.isImage
-                      ? ClipRRect(borderRadius: BorderRadius.circular(4), child: Image.memory(f.bytes, width: 32, height: 32, fit: BoxFit.cover))
-                      : Container(
-                          width: 32, height: 32,
-                          decoration: BoxDecoration(color: kAccentSub, borderRadius: BorderRadius.circular(4)),
-                          child: const Icon(Icons.insert_drive_file_outlined, size: 16, color: kAccentMid)),
-                  title: RichText(text: TextSpan(
-                    style: GoogleFonts.inter(color: kText, fontSize: 13),
-                    children: [
-                      TextSpan(text: '@', style: GoogleFonts.inter(color: kAccentMid, fontWeight: FontWeight.w700)),
-                      TextSpan(text: f.name),
-                    ],
-                  )),
+                      ? ClipRRect(borderRadius: BorderRadius.circular(4), child: Image.memory(f.bytes, width: 30, height: 30, fit: BoxFit.cover))
+                      : const Icon(Icons.attach_file, size: 20, color: kAccentMid),
+                  title: Text('@${f.name.replaceAll(' ', '_').replaceAll('.', '_')}', style: GoogleFonts.inter(color: kAccentMid, fontSize: 13)),
                   onTap: () => _insertMention(f),
                 );
               },
             ),
           ),
 
-        // Bottom bar
+        // Main text area
+        Expanded(child: TextField(
+          controller: _ctrl, focusNode: _focus,
+          maxLines: null, expands: true,
+          onChanged: (_) => setState(() {}),
+          style: GoogleFonts.inter(color: kText, fontSize: 15, height: 1.65),
+          cursorColor: kAccent, cursorWidth: 1.5,
+          decoration: InputDecoration(
+            hintText: 'Écris ton prompt complet ici…\n\nUtilise @ pour mentionner une image.',
+            hintStyle: GoogleFonts.inter(color: kMuted2, fontSize: 15, height: 1.65),
+            border: InputBorder.none,
+            contentPadding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+          ),
+        )),
+
+        // Bottom action bar
         Container(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+          padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
           decoration: const BoxDecoration(border: Border(top: BorderSide(color: kBorder, width: 0.5))),
-          child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-            if (_ctrl.text.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(right: 10),
-                child: Text(
-                  '${_ctrl.text.split(' ').where((w) => w.isNotEmpty).length} mots',
-                  style: GoogleFonts.inter(color: kMuted2, fontSize: 12),
-                ),
-              ),
+          child: Row(children: [
+            Text('${_ctrl.text.length} car.', style: GoogleFonts.inter(color: kMuted2, fontSize: 12)),
+            const SizedBox(width: 8),
+            if (_files.isNotEmpty) Text('• ${_files.length} fichier${_files.length > 1 ? "s" : ""}', style: GoogleFonts.inter(color: kMuted2, fontSize: 12)),
             const Spacer(),
-            GestureDetector(
-              onTap: hasContent && !_saving ? _send : null,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
-                width: 44, height: 44,
-                decoration: BoxDecoration(
-                  color: hasContent && !_saving ? kAccent : kCard,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: hasContent && !_saving ? Colors.transparent : kBorder, width: 0.5),
-                ),
-                child: Icon(Icons.arrow_upward_rounded, size: 20,
-                    color: hasContent && !_saving ? Colors.white : kMuted2),
-              ),
+            AppButton(
+              label: _sending ? 'Envoi…' : 'Envoyer',
+              icon: _sending ? null : Icons.arrow_upward_rounded,
+              loading: _sending,
+              onTap: (hasContent && !_sending) ? _send : null,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             ),
           ]),
         ),
       ])),
     );
   }
+
+  void _showImagePreview(Uint8List bytes, String name) {
+    showDialog(
+      context: context, barrierColor: Colors.black.withOpacity(0.95),
+      builder: (_) => Scaffold(
+        backgroundColor: Colors.black,
+        body: SafeArea(child: Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
+            child: Row(children: [
+              const Spacer(),
+              IconButton(icon: const Icon(Icons.close, color: Colors.white60), onPressed: () => Navigator.pop(_)),
+            ]),
+          ),
+          Expanded(child: InteractiveViewer(minScale: 0.5, maxScale: 5, child: Center(child: Image.memory(bytes)))),
+          Padding(padding: const EdgeInsets.all(12), child: Text(name, style: GoogleFonts.inter(color: Colors.white38, fontSize: 12), textAlign: TextAlign.center)),
+        ])),
+      ),
+    );
+  }
 }
 
 class _ToolBtn extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-  final String tooltip;
+  final IconData icon; final VoidCallback onTap; final String tooltip;
   const _ToolBtn({required this.icon, required this.onTap, required this.tooltip});
-
   @override
   Widget build(BuildContext context) => IconButton(
-    icon: Icon(icon, size: 18, color: kMuted2),
-    onPressed: onTap,
-    tooltip: tooltip,
-    splashRadius: 18,
-    constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-    padding: const EdgeInsets.all(6),
-  );
-}
-
-class _AttachTile extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-  const _AttachTile({required this.icon, required this.title, required this.subtitle, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) => ListTile(
-    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-    leading: Container(
-      width: 40, height: 40,
-      decoration: BoxDecoration(color: kAccentSub, borderRadius: BorderRadius.circular(10)),
-      child: Icon(icon, color: kAccentMid, size: 20),
-    ),
-    title: Text(title, style: GoogleFonts.inter(color: kText, fontSize: 14, fontWeight: FontWeight.w500)),
-    subtitle: Text(subtitle, style: GoogleFonts.inter(color: kMuted2, fontSize: 12)),
-    onTap: onTap,
+    icon: Icon(icon, size: 20, color: kMuted), onPressed: onTap, tooltip: tooltip,
+    splashRadius: 20, constraints: const BoxConstraints(minWidth: 38, minHeight: 38), padding: const EdgeInsets.all(7),
   );
 }
