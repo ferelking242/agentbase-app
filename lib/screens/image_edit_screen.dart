@@ -87,11 +87,11 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
     if (_brightness != 0 || _contrast != 0) {
       final b = _brightness / 100;
       final c = (_contrast / 100) + 1;
-      paint.colorFilter = ColorFilter.matrix([
-        c, 0, 0, 0, b * 255,
-        0, c, 0, 0, b * 255,
-        0, 0, c, 0, b * 255,
-        0, 0, 0, 1, 0,
+      paint.colorFilter = ColorFilter.matrix(<double>[
+        c,   0.0, 0.0, 0.0, b * 255,
+        0.0, c,   0.0, 0.0, b * 255,
+        0.0, 0.0, c,   0.0, b * 255,
+        0.0, 0.0, 0.0, 1.0, 0.0,
       ]);
     }
     canvas.drawImage(_decodedImage!, Offset.zero, paint);
@@ -227,14 +227,13 @@ class _ImageEditScreenState extends State<ImageEditScreen> {
   Offset _normalize(Offset pos, Size size) => Offset(pos.dx / size.width, pos.dy / size.height);
 
   ColorFilter _buildColorFilter() {
-    if (_brightness == 0 && _contrast == 0) return const ColorFilter.mode(Colors.transparent, BlendMode.dst);
     final b = _brightness / 100;
     final c = (_contrast / 100) + 1;
-    return ColorFilter.matrix([
-      c, 0, 0, 0, b * 255,
-      0, c, 0, 0, b * 255,
-      0, 0, c, 0, b * 255,
-      0, 0, 0, 1, 0,
+    return ColorFilter.matrix(<double>[
+      c,   0.0, 0.0, 0.0, b * 255,
+      0.0, c,   0.0, 0.0, b * 255,
+      0.0, 0.0, c,   0.0, b * 255,
+      0.0, 0.0, 0.0, 1.0, 0.0,
     ]);
   }
 
