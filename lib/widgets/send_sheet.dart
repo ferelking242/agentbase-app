@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../models/room.dart';
 import '../services/github_service.dart';
+import '../theme.dart';
+import 'app_components.dart';
 
 typedef SendResult = ({String name, Room? room});
 
@@ -8,12 +11,14 @@ class SendSheet extends StatefulWidget {
   final String defaultName;
   final List<Room> preloadedRooms;
   final GitHubService github;
+
   const SendSheet({
     super.key,
     required this.defaultName,
     required this.preloadedRooms,
     required this.github,
   });
+
   @override
   State<SendSheet> createState() => _SendSheetState();
 }
@@ -45,9 +50,7 @@ class _SendSheetState extends State<SendSheet> {
   @override
   void dispose() { _ctrl.dispose(); super.dispose(); }
 
-  void _submit() {
-    Navigator.pop(context, (name: _ctrl.text.trim(), room: _room));
-  }
+  void _submit() => Navigator.pop(context, (name: _ctrl.text.trim(), room: _room));
 
   @override
   Widget build(BuildContext context) {
@@ -55,8 +58,9 @@ class _SendSheetState extends State<SendSheet> {
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Container(
         decoration: const BoxDecoration(
-          color: Color(0xFF141414),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          color: kCard,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+          border: Border(top: BorderSide(color: kBorder, width: 0.5)),
         ),
         child: SafeArea(
           top: false,
@@ -64,107 +68,87 @@ class _SendSheetState extends State<SendSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Center(child: Container(
-                margin: const EdgeInsets.only(top: 10, bottom: 20),
-                width: 36, height: 4,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF333333),
-                  borderRadius: BorderRadius.circular(2)),
-              )),
+              const AppDragHandle(),
 
-              const Padding(
-                padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
-                child: Text('NOM DU PROMPT',
-                  style: TextStyle(color: Color(0xFF666666), fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.8)),
-              ),
+              // Section: Nom du prompt
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: TextField(
-                  controller: _ctrl,
-                  autofocus: true,
-                  style: const TextStyle(color: Color(0xFFECECEC), fontSize: 15),
-                  cursorColor: const Color(0xFF6366F1),
-                  onSubmitted: (_) => _submit(),
-                  decoration: InputDecoration(
-                    hintText: 'Ex: Analyse de données',
-                    hintStyle: const TextStyle(color: Color(0xFF444444)),
-                    filled: true,
-                    fillColor: const Color(0xFF0D0D0D),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF222222))),
-                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF222222))),
-                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF6366F1))),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-                    suffixIcon: IconButton(
-                      icon: const Icon(Icons.clear, size: 16, color: Color(0xFF444444)),
-                      onPressed: () => _ctrl.clear(),
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const AppLabel('Nom du prompt'),
+                  const SizedBox(height: 8),
+                  AppInput(
+                    controller: _ctrl,
+                    autofocus: true,
+                    hint: 'Ex: Analyse de données',
+                    onSubmitted: (_) => _submit(),
+                    suffix: GestureDetector(
+                      onTap: () => _ctrl.clear(),
+                      child: const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: Icon(Icons.close, size: 16, color: kMuted2),
+                      ),
                     ),
                   ),
-                ),
+                ]),
               ),
 
-              const SizedBox(height: 20),
-              const Padding(
-                padding: EdgeInsets.fromLTRB(20, 0, 20, 10),
-                child: Text('ROOM',
-                  style: TextStyle(color: Color(0xFF666666), fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.8)),
+              // Section: Room
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+                child: const AppLabel('Assigner à une room'),
               ),
               SizedBox(
-                height: 40,
+                height: 44,
                 child: _loading
-                  ? const Center(child: SizedBox(width: 18, height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF6366F1))))
-                  : ListView(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      children: [
-                        RoomChip(
-                          label: 'Aucune',
-                          selected: _room == null,
-                          onTap: () => setState(() => _room = null)),
-                        ..._rooms.map((r) => RoomChip(
-                          label: r.name,
-                          icon: r.iconData,
-                          color: r.accentColor,
-                          selected: _room?.id == r.id,
-                          onTap: () => setState(() => _room = r),
-                        )),
-                      ],
-                    ),
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 20),
+                        child: Row(children: [
+                          SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: kAccent)),
+                          SizedBox(width: 10),
+                          Text('Chargement…', style: TextStyle(color: kMuted2, fontSize: 13)),
+                        ]),
+                      )
+                    : ListView(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        children: [
+                          RoomChip(
+                            label: 'Aucune',
+                            selected: _room == null,
+                            onTap: () => setState(() => _room = null),
+                          ),
+                          ..._rooms.map((r) => RoomChip(
+                            label: r.name,
+                            icon: r.iconData,
+                            color: r.accentColor,
+                            selected: _room?.id == r.id,
+                            onTap: () => setState(() => _room = r),
+                          )),
+                        ],
+                      ),
               ),
 
-              const SizedBox(height: 20),
+              // Actions
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
                 child: Row(children: [
                   Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFF666666),
-                        side: const BorderSide(color: Color(0xFF2A2A2A)),
-                        padding: const EdgeInsets.symmetric(vertical: 13),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: const Text('Annuler'),
+                    child: AppButton(
+                      label: 'Annuler',
+                      variant: AppButtonVariant.outline,
+                      fullWidth: true,
+                      onTap: () => Navigator.pop(context),
+                      padding: const EdgeInsets.symmetric(vertical: 13),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 10),
                   Expanded(
                     flex: 2,
-                    child: ElevatedButton(
-                      onPressed: _submit,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF6366F1),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 13),
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: Text(
-                        _room != null ? 'Envoyer → ${_room!.name}' : 'Envoyer',
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                    child: AppButton(
+                      label: _room != null ? 'Envoyer → ${_room!.name}' : 'Envoyer',
+                      fullWidth: true,
+                      onTap: _submit,
+                      padding: const EdgeInsets.symmetric(vertical: 13),
                     ),
                   ),
                 ]),
@@ -177,12 +161,14 @@ class _SendSheetState extends State<SendSheet> {
   }
 }
 
+// ── RoomChip ──────────────────────────────────────────────────────────────────
 class RoomChip extends StatelessWidget {
   final String label;
   final IconData? icon;
   final Color? color;
   final bool selected;
   final VoidCallback onTap;
+
   const RoomChip({
     super.key,
     required this.label,
@@ -194,25 +180,28 @@ class RoomChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = color ?? const Color(0xFF6366F1);
+    final c = color ?? kAccent;
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         margin: const EdgeInsets.only(right: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? c.withOpacity(0.18) : const Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: selected ? c : const Color(0xFF2A2A2A), width: selected ? 1.5 : 1),
+          color: selected ? c.withValues(alpha: 0.12) : kBg,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: selected ? c.withValues(alpha: 0.6) : kBorder,
+            width: selected ? 1 : 0.5,
+          ),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           if (icon != null) ...[
-            Icon(icon, size: 12, color: selected ? c : const Color(0xFF666666)),
+            Icon(icon, size: 13, color: selected ? c : kMuted2),
             const SizedBox(width: 5),
           ],
-          Text(label, style: TextStyle(
-            color: selected ? c : const Color(0xFF777777),
+          Text(label, style: GoogleFonts.inter(
+            color: selected ? c : kMuted,
             fontSize: 13,
             fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
           )),
