@@ -11,7 +11,6 @@ import '../models/room.dart';
 import '../theme.dart';
 import '../widgets/app_components.dart';
 import '../widgets/send_sheet.dart';
-import 'home_screen.dart';
 import 'image_edit_screen.dart';
 
 class FullscreenComposerScreen extends StatefulWidget {
