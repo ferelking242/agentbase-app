@@ -216,9 +216,9 @@ class _AccueilTab extends StatelessWidget {
         Container(
           width: 80, height: 80,
           decoration: BoxDecoration(
-            color: accent.withValues(alpha: 0.1),
+            color: accent.withOpacity(0.1),
             shape: BoxShape.circle,
-            border: Border.all(color: accent.withValues(alpha: 0.25), width: 1.5),
+            border: Border.all(color: accent.withOpacity(0.25), width: 1.5),
           ),
           child: Icon(room.iconData, size: 34, color: accent),
         ),
@@ -397,9 +397,9 @@ class _ReglesTabState extends State<_ReglesTab> {
           margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
-            color: kYellow.withValues(alpha: 0.08),
+            color: kYellow.withOpacity(0.08),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: kYellow.withValues(alpha: 0.25), width: 0.5),
+            border: Border.all(color: kYellow.withOpacity(0.25), width: 0.5),
           ),
           child: Row(children: [
             const Icon(Icons.edit_note, size: 14, color: kYellow),
@@ -426,7 +426,7 @@ class _ReglesTabState extends State<_ReglesTab> {
                       decoration: BoxDecoration(
                         color: kCard,
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: kAccent.withValues(alpha: 0.5), width: 1),
+                        border: Border.all(color: kAccent.withOpacity(0.5), width: 1),
                       ),
                       padding: const EdgeInsets.all(12),
                       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
