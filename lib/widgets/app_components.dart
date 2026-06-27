@@ -78,7 +78,7 @@ class AppButton extends StatelessWidget {
       case AppButtonVariant.ghost:
         bg = Colors.transparent; fg = kMuted; border = Colors.transparent;
       case AppButtonVariant.destructive:
-        bg = kRedSub; fg = kRed; border = kRed.withValues(alpha: 0.3);
+        bg = kRedSub; fg = kRed; border = kRed.withOpacity(0.3);
       case AppButtonVariant.outline:
         bg = Colors.transparent; fg = kText; border = kBorder;
     }
@@ -218,7 +218,7 @@ class AppBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: bg ?? kAccentSub,
         borderRadius: BorderRadius.circular(99),
-        border: Border.all(color: (fg ?? kAccentMid).withValues(alpha: 0.2)),
+        border: Border.all(color: (fg ?? kAccentMid).withOpacity(0.2)),
       ),
       child: Text(label,
         style: GoogleFonts.inter(
