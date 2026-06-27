@@ -219,7 +219,7 @@ class _Slider extends StatelessWidget {
           activeTrackColor: kAccentMid,
           inactiveTrackColor: Colors.white12,
           thumbColor: Colors.white,
-          overlayColor: kAccent.withValues(alpha: 0.2),
+          overlayColor: kAccent.withOpacity(0.2),
         ),
         child: Slider(value: value.clamp(min, max), min: min, max: max, onChanged: onChanged),
       )),
