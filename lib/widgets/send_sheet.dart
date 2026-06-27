@@ -188,10 +188,10 @@ class RoomChip extends StatelessWidget {
         margin: const EdgeInsets.only(right: 8),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? c.withValues(alpha: 0.12) : kBg,
+          color: selected ? c.withOpacity(0.12) : kBg,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: selected ? c.withValues(alpha: 0.6) : kBorder,
+            color: selected ? c.withOpacity(0.6) : kBorder,
             width: selected ? 1 : 0.5,
           ),
         ),
