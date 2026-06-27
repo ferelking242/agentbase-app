@@ -3,10 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../services/github_service.dart';
 import '../services/prefs_service.dart';
 import '../models/saved_prompt.dart';
 import '../models/room.dart';
+import '../theme.dart';
+import '../widgets/app_components.dart';
 import '../widgets/send_sheet.dart';
 
 class FullscreenComposerScreen extends StatefulWidget {
@@ -61,7 +64,6 @@ class _FullscreenComposerScreenState extends State<FullscreenComposerScreen> {
     } catch (_) {}
   }
 
-  // ── @ mention ─────────────────────────────────────────────────────────────
   void _onCtrlChange() {
     final pos = _ctrl.selection.baseOffset;
     if (!_ctrl.selection.isValid || pos < 0 || pos > _ctrl.text.length) {
@@ -77,9 +79,7 @@ class _FullscreenComposerScreenState extends State<FullscreenComposerScreen> {
   List<AttachedFile> get _mentionSuggestions {
     if (_mentionQuery == null || _files.isEmpty) return [];
     if (_mentionQuery!.isEmpty) return _files;
-    return _files
-        .where((f) => f.name.toLowerCase().contains(_mentionQuery!.toLowerCase()))
-        .toList();
+    return _files.where((f) => f.name.toLowerCase().contains(_mentionQuery!.toLowerCase())).toList();
   }
 
   void _insertMention(AttachedFile f) {
@@ -89,44 +89,22 @@ class _FullscreenComposerScreenState extends State<FullscreenComposerScreen> {
     final after = _ctrl.text.substring(pos);
     final match = RegExp(r'@(\w*)$').firstMatch(before);
     final mention = '@${f.name.replaceAll(' ', '_')}';
-    final newBefore = match != null
-        ? before.substring(0, match.start) + mention
-        : before + mention;
-    _ctrl.value = TextEditingValue(
-      text: newBefore + after,
-      selection: TextSelection.collapsed(offset: newBefore.length),
-    );
+    final newBefore = match != null ? before.substring(0, match.start) + mention : before + mention;
+    _ctrl.value = TextEditingValue(text: newBefore + after, selection: TextSelection.collapsed(offset: newBefore.length));
     setState(() => _mentionQuery = null);
   }
 
-  // ── Attach ────────────────────────────────────────────────────────────────
   void _showAttachMenu() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF1A1A1A),
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      backgroundColor: kCard,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (_) => SafeArea(
         top: false,
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Container(
-            margin: const EdgeInsets.only(top: 8, bottom: 8),
-            width: 36, height: 4,
-            decoration: BoxDecoration(
-                color: const Color(0xFF333333),
-                borderRadius: BorderRadius.circular(2))),
-          ListTile(
-            leading: const Icon(Icons.folder_outlined, color: Color(0xFF6366F1)),
-            title: const Text('Fichiers', style: TextStyle(color: Color(0xFFECECEC), fontSize: 15)),
-            subtitle: const Text('Tout type de fichier', style: TextStyle(color: Color(0xFF666666), fontSize: 12)),
-            onTap: () { Navigator.pop(context); _pickFiles(); },
-          ),
-          ListTile(
-            leading: const Icon(Icons.photo_library_outlined, color: Color(0xFF6366F1)),
-            title: const Text('Galerie', style: TextStyle(color: Color(0xFFECECEC), fontSize: 15)),
-            subtitle: const Text('Photos et images', style: TextStyle(color: Color(0xFF666666), fontSize: 12)),
-            onTap: () { Navigator.pop(context); _pickFromGallery(); },
-          ),
+          const AppDragHandle(),
+          _AttachTile(icon: Icons.folder_outlined, title: 'Fichiers', subtitle: 'Tout type de fichier', onTap: () { Navigator.pop(context); _pickFiles(); }),
+          _AttachTile(icon: Icons.photo_library_outlined, title: 'Galerie', subtitle: 'Photos et images', onTap: () { Navigator.pop(context); _pickFromGallery(); }),
           const SizedBox(height: 8),
         ]),
       ),
@@ -135,18 +113,15 @@ class _FullscreenComposerScreenState extends State<FullscreenComposerScreen> {
 
   Future<void> _pickFiles() async {
     try {
-      final res = await FilePicker.platform
-          .pickFiles(allowMultiple: true, withData: true, type: FileType.any);
+      final res = await FilePicker.platform.pickFiles(allowMultiple: true, withData: true, type: FileType.any);
       if (res == null) return;
       setState(() {
         for (final f in res.files) {
           if (f.bytes != null) {
             final ext = f.name.toLowerCase();
             _files.insert(0, AttachedFile(
-              name: f.name,
-              bytes: f.bytes!,
-              isImage: ext.endsWith('.png') || ext.endsWith('.jpg') ||
-                  ext.endsWith('.jpeg') || ext.endsWith('.gif') || ext.endsWith('.webp'),
+              name: f.name, bytes: f.bytes!,
+              isImage: ext.endsWith('.png') || ext.endsWith('.jpg') || ext.endsWith('.jpeg') || ext.endsWith('.gif') || ext.endsWith('.webp'),
             ));
           }
         }
@@ -162,14 +137,12 @@ class _FullscreenComposerScreenState extends State<FullscreenComposerScreen> {
     }
     final ext = _extractExt(img.name as String);
     final now = DateTime.now();
-    return 'photo_${now.year}${now.month.toString().padLeft(2,'0')}${now.day.toString().padLeft(2,'0')}_${now.hour.toString().padLeft(2,'0')}${now.minute.toString().padLeft(2,'0')}${now.second.toString().padLeft(2,'0')}${index > 0 ? "_$index" : ""}$ext';
+    return 'photo_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}${index > 0 ? "_$index" : ""}$ext';
   }
 
   bool _isPickerTempName(String name) {
     final lower = name.toLowerCase();
-    return lower.startsWith('image_picker_') ||
-        lower.startsWith('picker_') ||
-        RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}').hasMatch(lower);
+    return lower.startsWith('image_picker_') || lower.startsWith('picker_') || RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}').hasMatch(lower);
   }
 
   String _extractExt(String name) {
@@ -183,12 +156,8 @@ class _FullscreenComposerScreenState extends State<FullscreenComposerScreen> {
       final imgs = await ImagePicker().pickMultiImage(imageQuality: 90);
       if (imgs.isEmpty) return;
       for (int i = 0; i < imgs.length; i++) {
-        final img = imgs[i];
-        final bytes = await img.readAsBytes();
-        if (mounted) {
-          setState(() => _files.insert(0, AttachedFile(
-            name: _cleanImageName(img, i), bytes: bytes, isImage: true)));
-        }
+        final bytes = await imgs[i].readAsBytes();
+        if (mounted) setState(() => _files.insert(0, AttachedFile(name: _cleanImageName(imgs[i], i), bytes: bytes, isImage: true)));
       }
     } catch (_) {}
   }
@@ -196,32 +165,20 @@ class _FullscreenComposerScreenState extends State<FullscreenComposerScreen> {
   void _showImageFullscreen(Uint8List bytes, String name) {
     showDialog(
       context: context,
-      barrierColor: Colors.black,
+      barrierColor: Colors.black.withValues(alpha: 0.95),
       builder: (_) => Scaffold(
         backgroundColor: Colors.black,
-        body: SafeArea(
-          child: Column(children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
-              child: Row(children: [
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white70),
-                  onPressed: () => Navigator.pop(_)),
-              ]),
-            ),
-            Expanded(
-              child: InteractiveViewer(
-                minScale: 0.5, maxScale: 5,
-                child: Center(child: Image.memory(bytes)),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Text(name, style: const TextStyle(color: Colors.white54, fontSize: 12)),
-            ),
-          ]),
-        ),
+        body: SafeArea(child: Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
+            child: Row(children: [
+              const Spacer(),
+              IconButton(icon: const Icon(Icons.close, color: Colors.white60), onPressed: () => Navigator.pop(_)),
+            ]),
+          ),
+          Expanded(child: InteractiveViewer(minScale: 0.5, maxScale: 5, child: Center(child: Image.memory(bytes)))),
+          Padding(padding: const EdgeInsets.all(12), child: Text(name, style: GoogleFonts.inter(color: Colors.white38, fontSize: 12))),
+        ])),
       ),
     );
   }
@@ -235,47 +192,19 @@ class _FullscreenComposerScreenState extends State<FullscreenComposerScreen> {
     final newName = await showDialog<String>(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: const Text('Renommer',
-            style: TextStyle(color: Color(0xFFECECEC), fontSize: 15, fontWeight: FontWeight.w600)),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          style: const TextStyle(color: Color(0xFFECECEC), fontSize: 14),
-          cursorColor: const Color(0xFF6366F1),
-          decoration: InputDecoration(
-            suffixText: ext,
-            suffixStyle: const TextStyle(color: Color(0xFF555555), fontSize: 14),
-            filled: true, fillColor: const Color(0xFF0D0D0D),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF2A2A2A))),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF2A2A2A))),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF6366F1))),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          ),
-          onSubmitted: (v) => Navigator.pop(_, v.trim()),
-        ),
+        backgroundColor: kCard,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: const BorderSide(color: kBorder, width: 0.5)),
+        title: Text('Renommer', style: GoogleFonts.inter(color: kText, fontSize: 15, fontWeight: FontWeight.w600)),
+        content: AppInput(controller: ctrl, autofocus: true, suffixText: ext, hint: 'Nom du fichier', onSubmitted: (v) => Navigator.pop(_, v.trim())),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(_),
-            child: const Text('Annuler', style: TextStyle(color: Color(0xFF666666)))),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(_, ctrl.text.trim()),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF6366F1),
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-            child: const Text('OK'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(_), child: Text('Annuler', style: GoogleFonts.inter(color: kMuted))),
+          AppButton(label: 'OK', onTap: () => Navigator.pop(_, ctrl.text.trim()), padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8)),
         ],
       ),
     );
     ctrl.dispose();
     if (newName != null && newName.isNotEmpty && mounted) {
-      setState(() {
-        _files[i] = AttachedFile(name: newName + ext, bytes: f.bytes, isImage: f.isImage);
-      });
+      setState(() => _files[i] = AttachedFile(name: newName + ext, bytes: f.bytes, isImage: f.isImage));
     }
   }
 
@@ -299,37 +228,24 @@ class _FullscreenComposerScreenState extends State<FullscreenComposerScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => SendSheet(
-        defaultName: defaultName,
-        preloadedRooms: _rooms,
-        github: widget.github,
-      ),
+      builder: (_) => SendSheet(defaultName: defaultName, preloadedRooms: _rooms, github: widget.github),
     );
     if (result == null) return;
     setState(() => _saving = true);
     try {
       final id = DateTime.now().millisecondsSinceEpoch.toString();
       String? roomContext;
-      if (result.room != null) {
-        roomContext = await widget.github.fetchContext(result.room!.id);
-      }
-      final link = await widget.github.pushDirectPrompt(
-        id, _ctrl.text, _files,
-        room: result.room,
-        roomContext: roomContext,
-      );
+      if (result.room != null) roomContext = await widget.github.fetchContext(result.room!.id);
+      final link = await widget.github.pushDirectPrompt(id, _ctrl.text, _files, room: result.room, roomContext: roomContext);
       final name = result.name.isNotEmpty ? result.name : defaultName;
       final prompt = SavedPrompt(id: id, name: name, link: link, created: DateTime.now());
-      await PrefsService.addPrompt(prompt);
+      final saved = await PrefsService.addPrompt(prompt);
       if (!mounted) return;
-      Navigator.pop(context, prompt);
+      Navigator.pop(context, saved);
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Erreur: ${e.toString().replaceAll("Exception: ", "")}'),
-        backgroundColor: const Color(0xFF3A1010),
-      ));
+      showAppSnack(context, 'Erreur: ${e.toString().replaceAll("Exception: ", "")}', isError: true);
     }
   }
 
@@ -338,176 +254,211 @@ class _FullscreenComposerScreenState extends State<FullscreenComposerScreen> {
     final hasContent = _ctrl.text.trim().isNotEmpty || _files.isNotEmpty;
     final mentions = _mentionSuggestions;
     return Scaffold(
-      backgroundColor: const Color(0xFF0E0E16),
-      body: SafeArea(
-        child: Column(children: [
-          // Top bar
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
-            child: Row(children: [
-              IconButton(
-                icon: const Icon(Icons.add, color: Color(0xFF555555), size: 22),
-                onPressed: _showAttachMenu,
-                tooltip: 'Joindre',
-              ),
-              IconButton(
-                icon: const Icon(Icons.content_paste_rounded, color: Color(0xFF555555), size: 20),
-                onPressed: _paste,
-                tooltip: 'Coller',
-              ),
-              const Spacer(),
-              IconButton(
-                icon: const Icon(Icons.fullscreen_exit, color: Color(0xFF555555), size: 24),
-                onPressed: () => Navigator.pop(context, null),
-                tooltip: 'Reduire',
-              ),
-            ]),
-          ),
-
-          // Attached files
-          if (_files.isNotEmpty)
-            Container(
-              height: 80,
-              margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: _files.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 8),
-                itemBuilder: (_, i) {
-                  final f = _files[i];
-                  return GestureDetector(
-                    onTap: f.isImage ? () => _showImageFullscreen(f.bytes, f.name) : null,
-                    onLongPress: () => _renameFile(i),
-                    child: Stack(children: [
-                      f.isImage
-                        ? ClipRRect(
-                            borderRadius: BorderRadius.circular(10),
-                            child: Image.memory(f.bytes, width: 80, height: 80, fit: BoxFit.cover))
-                        : Container(
-                            width: 80, height: 80,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF1A1A1A),
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: const Color(0xFF2A2A2A))),
-                            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                              const Icon(Icons.insert_drive_file_outlined, color: Color(0xFF6366F1), size: 28),
-                              const SizedBox(height: 4),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 4),
-                                child: Text(f.name,
-                                  style: const TextStyle(color: Color(0xFF999999), fontSize: 9),
-                                  maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center),
-                              ),
-                            ])),
-                      Positioned(
-                        top: 2, right: 2,
-                        child: GestureDetector(
-                          onTap: () => setState(() => _files.removeAt(i)),
-                          child: Container(
-                            width: 18, height: 18,
-                            decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
-                            child: const Icon(Icons.close, size: 12, color: Colors.white),
-                          ),
-                        ),
-                      ),
-                    ]),
-                  );
-                },
+      backgroundColor: kBg,
+      body: SafeArea(child: Column(children: [
+        // Top bar
+        Container(
+          padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+          decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: kBorder, width: 0.5))),
+          child: Row(children: [
+            _ToolBtn(icon: Icons.add, onTap: _showAttachMenu, tooltip: 'Joindre'),
+            _ToolBtn(icon: Icons.content_paste_rounded, onTap: _paste, tooltip: 'Coller'),
+            const Spacer(),
+            Text(
+              '${_ctrl.text.length} car.',
+              style: GoogleFonts.inter(color: kMuted2, fontSize: 11.5),
+            ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: () => Navigator.pop(context, null),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                decoration: BoxDecoration(color: kCard, borderRadius: BorderRadius.circular(8), border: Border.all(color: kBorder, width: 0.5)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.fullscreen_exit_rounded, size: 15, color: kMuted2),
+                  const SizedBox(width: 5),
+                  Text('Réduire', style: GoogleFonts.inter(color: kMuted2, fontSize: 12.5)),
+                ]),
               ),
             ),
+          ]),
+        ),
 
-          // Text area
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-              child: _saving
-                ? const Center(child: CircularProgressIndicator(color: Color(0xFF6366F1), strokeWidth: 2))
-                : TextField(
+        // Files
+        if (_files.isNotEmpty)
+          Container(
+            height: 88,
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 4),
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: _files.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (_, i) {
+                final f = _files[i];
+                return GestureDetector(
+                  onTap: f.isImage ? () => _showImageFullscreen(f.bytes, f.name) : null,
+                  onLongPress: () => _renameFile(i),
+                  child: Stack(children: [
+                    f.isImage
+                        ? ClipRRect(borderRadius: BorderRadius.circular(10), child: Image.memory(f.bytes, width: 80, height: 80, fit: BoxFit.cover))
+                        : Container(
+                            width: 80, height: 80,
+                            decoration: BoxDecoration(color: kCard, borderRadius: BorderRadius.circular(10), border: Border.all(color: kBorder, width: 0.5)),
+                            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                              const Icon(Icons.insert_drive_file_outlined, color: kAccentMid, size: 26),
+                              const SizedBox(height: 4),
+                              Padding(padding: const EdgeInsets.symmetric(horizontal: 4),
+                                child: Text(f.name, style: GoogleFonts.inter(color: kMuted2, fontSize: 9), maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center)),
+                            ])),
+                    Positioned(
+                      top: 3, right: 3,
+                      child: GestureDetector(
+                        onTap: () => setState(() => _files.removeAt(i)),
+                        child: Container(
+                          width: 18, height: 18,
+                          decoration: BoxDecoration(color: kBg.withValues(alpha: 0.88), shape: BoxShape.circle, border: Border.all(color: kBorder, width: 0.5)),
+                          child: const Icon(Icons.close, size: 11, color: kText),
+                        ),
+                      ),
+                    ),
+                  ]),
+                );
+              },
+            ),
+          ),
+
+        // Text area
+        Expanded(
+          child: _saving
+              ? const AppLoadingIndicator()
+              : Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                  child: TextField(
                     controller: _ctrl,
                     maxLines: null,
                     expands: true,
                     autofocus: true,
                     textAlignVertical: TextAlignVertical.top,
                     onChanged: (_) => setState(() {}),
-                    style: const TextStyle(color: Color(0xFFECECEC), fontSize: 16, height: 1.6),
-                    cursorColor: const Color(0xFF6366F1),
-                    decoration: const InputDecoration(
-                      hintText: 'Ecris ton prompt ici… ou tape @',
-                      hintStyle: TextStyle(color: Color(0xFF333333), fontSize: 16),
+                    style: GoogleFonts.inter(color: kText, fontSize: 16, height: 1.65),
+                    cursorColor: kAccent,
+                    cursorWidth: 1.5,
+                    decoration: InputDecoration(
+                      hintText: 'Écris ton prompt ici… ou tape @ pour mentionner un fichier',
+                      hintStyle: GoogleFonts.inter(color: kMuted2, fontSize: 15, height: 1.6),
                       border: InputBorder.none,
                       contentPadding: EdgeInsets.zero,
                       isDense: true,
                     ),
                   ),
+                ),
+        ),
+
+        // Mention overlay
+        if (_mentionQuery != null && mentions.isNotEmpty)
+          Container(
+            constraints: const BoxConstraints(maxHeight: 160),
+            decoration: const BoxDecoration(
+              color: kCard,
+              border: Border(top: BorderSide(color: kBorder, width: 0.5), bottom: BorderSide(color: kBorder, width: 0.5)),
+            ),
+            child: ListView.builder(
+              shrinkWrap: true,
+              padding: EdgeInsets.zero,
+              itemCount: mentions.length,
+              itemBuilder: (_, i) {
+                final f = mentions[i];
+                return ListTile(
+                  dense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                  leading: f.isImage
+                      ? ClipRRect(borderRadius: BorderRadius.circular(4), child: Image.memory(f.bytes, width: 32, height: 32, fit: BoxFit.cover))
+                      : Container(
+                          width: 32, height: 32,
+                          decoration: BoxDecoration(color: kAccentSub, borderRadius: BorderRadius.circular(4)),
+                          child: const Icon(Icons.insert_drive_file_outlined, size: 16, color: kAccentMid)),
+                  title: RichText(text: TextSpan(
+                    style: GoogleFonts.inter(color: kText, fontSize: 13),
+                    children: [
+                      TextSpan(text: '@', style: GoogleFonts.inter(color: kAccentMid, fontWeight: FontWeight.w700)),
+                      TextSpan(text: f.name),
+                    ],
+                  )),
+                  onTap: () => _insertMention(f),
+                );
+              },
             ),
           ),
 
-          // @ Mention overlay
-          if (_mentionQuery != null && mentions.isNotEmpty)
-            Container(
-              constraints: const BoxConstraints(maxHeight: 160),
-              decoration: const BoxDecoration(
-                color: Color(0xFF1A1A1A),
-                border: Border(
-                  top: BorderSide(color: Color(0xFF2A2A2A)),
-                  bottom: BorderSide(color: Color(0xFF2A2A2A)),
+        // Bottom bar
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+          decoration: const BoxDecoration(border: Border(top: BorderSide(color: kBorder, width: 0.5))),
+          child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+            if (_ctrl.text.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(right: 10),
+                child: Text(
+                  '${_ctrl.text.split(' ').where((w) => w.isNotEmpty).length} mots',
+                  style: GoogleFonts.inter(color: kMuted2, fontSize: 12),
                 ),
               ),
-              child: ListView.builder(
-                shrinkWrap: true,
-                padding: EdgeInsets.zero,
-                itemCount: mentions.length,
-                itemBuilder: (_, i) {
-                  final f = mentions[i];
-                  return ListTile(
-                    dense: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-                    leading: f.isImage
-                        ? ClipRRect(
-                            borderRadius: BorderRadius.circular(4),
-                            child: Image.memory(f.bytes, width: 32, height: 32, fit: BoxFit.cover))
-                        : Container(
-                            width: 32, height: 32,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF1E1E2E),
-                              borderRadius: BorderRadius.circular(4)),
-                            child: const Icon(Icons.insert_drive_file_outlined,
-                                size: 16, color: Color(0xFF6366F1))),
-                    title: RichText(text: TextSpan(
-                      style: const TextStyle(color: Color(0xFFECECEC), fontSize: 13),
-                      children: [
-                        const TextSpan(text: '@', style: TextStyle(color: Color(0xFF6366F1), fontWeight: FontWeight.w700)),
-                        TextSpan(text: f.name),
-                      ],
-                    )),
-                    onTap: () => _insertMention(f),
-                  );
-                },
+            const Spacer(),
+            GestureDetector(
+              onTap: hasContent && !_saving ? _send : null,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                width: 44, height: 44,
+                decoration: BoxDecoration(
+                  color: hasContent && !_saving ? kAccent : kCard,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: hasContent && !_saving ? Colors.transparent : kBorder, width: 0.5),
+                ),
+                child: Icon(Icons.arrow_upward_rounded, size: 20,
+                    color: hasContent && !_saving ? Colors.white : kMuted2),
               ),
             ),
-
-          // Bottom bar
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-            child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-              GestureDetector(
-                onTap: hasContent && !_saving ? _send : null,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  width: 44, height: 44,
-                  decoration: BoxDecoration(
-                    color: hasContent && !_saving ? const Color(0xFFECECEC) : const Color(0xFF222222),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(Icons.arrow_upward,
-                    size: 20,
-                    color: hasContent && !_saving ? Colors.black : const Color(0xFF444444)),
-                ),
-              ),
-            ]),
-          ),
-        ]),
-      ),
+          ]),
+        ),
+      ])),
     );
   }
+}
+
+class _ToolBtn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  final String tooltip;
+  const _ToolBtn({required this.icon, required this.onTap, required this.tooltip});
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+    icon: Icon(icon, size: 18, color: kMuted2),
+    onPressed: onTap,
+    tooltip: tooltip,
+    splashRadius: 18,
+    constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+    padding: const EdgeInsets.all(6),
+  );
+}
+
+class _AttachTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+  const _AttachTile({required this.icon, required this.title, required this.subtitle, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+    leading: Container(
+      width: 40, height: 40,
+      decoration: BoxDecoration(color: kAccentSub, borderRadius: BorderRadius.circular(10)),
+      child: Icon(icon, color: kAccentMid, size: 20),
+    ),
+    title: Text(title, style: GoogleFonts.inter(color: kText, fontSize: 14, fontWeight: FontWeight.w500)),
+    subtitle: Text(subtitle, style: GoogleFonts.inter(color: kMuted2, fontSize: 12)),
+    onTap: onTap,
+  );
 }
