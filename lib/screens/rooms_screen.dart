@@ -106,7 +106,7 @@ class _RoomCard extends StatelessWidget {
           color: kCard,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: kBorder, width: 0.5),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 12, offset: const Offset(0, 4))],
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.18), blurRadius: 12, offset: const Offset(0, 4))],
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           // Hero header
@@ -116,9 +116,9 @@ class _RoomCard extends StatelessWidget {
               borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
               gradient: LinearGradient(
                 begin: Alignment.topLeft, end: Alignment.bottomRight,
-                colors: [accent.withValues(alpha: 0.15), accent.withValues(alpha: 0.04)],
+                colors: [accent.withOpacity(0.15), accent.withOpacity(0.04)],
               ),
-              border: Border(bottom: BorderSide(color: accent.withValues(alpha: 0.12), width: 0.5)),
+              border: Border(bottom: BorderSide(color: accent.withOpacity(0.12), width: 0.5)),
             ),
             child: Stack(children: [
               // Grid pattern
@@ -132,9 +132,9 @@ class _RoomCard extends StatelessWidget {
                   Container(
                     width: 52, height: 52,
                     decoration: BoxDecoration(
-                      color: accent.withValues(alpha: 0.12),
+                      color: accent.withOpacity(0.12),
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: accent.withValues(alpha: 0.25), width: 1),
+                      border: Border.all(color: accent.withOpacity(0.25), width: 1),
                     ),
                     child: Icon(room.iconData, size: 24, color: accent),
                   ),
@@ -151,9 +151,9 @@ class _RoomCard extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: kGreenSub.withValues(alpha: 0.6),
+                      color: kGreenSub.withOpacity(0.6),
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: kGreen.withValues(alpha: 0.2)),
+                      border: Border.all(color: kGreen.withOpacity(0.2)),
                     ),
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
                       Container(width: 6, height: 6, decoration: const BoxDecoration(color: kGreen, shape: BoxShape.circle)),
@@ -200,9 +200,9 @@ class _RoomCard extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 12),
               decoration: BoxDecoration(
-                gradient: LinearGradient(colors: [accent.withValues(alpha: 0.15), accent.withValues(alpha: 0.08)]),
+                gradient: LinearGradient(colors: [accent.withOpacity(0.15), accent.withOpacity(0.08)]),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: accent.withValues(alpha: 0.25), width: 0.5),
+                border: Border.all(color: accent.withOpacity(0.25), width: 0.5),
               ),
               child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                 Icon(Icons.open_in_new_rounded, size: 15, color: accent),
@@ -226,7 +226,7 @@ class _StatBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Column(children: [
     Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-      Icon(icon, size: 13, color: color.withValues(alpha: 0.7)),
+      Icon(icon, size: 13, color: color.withOpacity(0.7)),
       const SizedBox(width: 5),
       Text(value, style: GoogleFonts.inter(color: kText, fontSize: 16, fontWeight: FontWeight.w700)),
     ]),
