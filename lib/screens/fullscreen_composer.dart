@@ -165,7 +165,7 @@ class _FullscreenComposerScreenState extends State<FullscreenComposerScreen> {
   void _showImageFullscreen(Uint8List bytes, String name) {
     showDialog(
       context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.95),
+      barrierColor: Colors.black.withOpacity(0.95),
       builder: (_) => Scaffold(
         backgroundColor: Colors.black,
         body: SafeArea(child: Column(children: [
@@ -316,7 +316,7 @@ class _FullscreenComposerScreenState extends State<FullscreenComposerScreen> {
                         onTap: () => setState(() => _files.removeAt(i)),
                         child: Container(
                           width: 18, height: 18,
-                          decoration: BoxDecoration(color: kBg.withValues(alpha: 0.88), shape: BoxShape.circle, border: Border.all(color: kBorder, width: 0.5)),
+                          decoration: BoxDecoration(color: kBg.withOpacity(0.88), shape: BoxShape.circle, border: Border.all(color: kBorder, width: 0.5)),
                           child: const Icon(Icons.close, size: 11, color: kText),
                         ),
                       ),
