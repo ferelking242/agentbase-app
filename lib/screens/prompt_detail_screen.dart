@@ -126,7 +126,7 @@ class _PromptDetailScreenState extends State<PromptDetailScreen> {
                 onTap: _delete,
                 child: Container(
                   width: 34, height: 34,
-                  decoration: BoxDecoration(color: kRedSub.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(8), border: Border.all(color: kRed.withValues(alpha: 0.2), width: 0.5)),
+                  decoration: BoxDecoration(color: kRedSub.withOpacity(0.5), borderRadius: BorderRadius.circular(8), border: Border.all(color: kRed.withOpacity(0.2), width: 0.5)),
                   child: const Icon(Icons.delete_outline, size: 17, color: kRed),
                 ),
               ),
