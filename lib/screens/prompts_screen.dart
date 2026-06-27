@@ -275,7 +275,7 @@ class _FilterBtn extends StatelessWidget {
       decoration: BoxDecoration(
         color: active ? kAccentSub : kCard,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: active ? kAccentMid.withValues(alpha: 0.4) : kBorder, width: active ? 1 : 0.5),
+        border: Border.all(color: active ? kAccentMid.withOpacity(0.4) : kBorder, width: active ? 1 : 0.5),
       ),
       child: Text(label, style: GoogleFonts.inter(
         color: active ? kAccentMid : kMuted,
@@ -462,9 +462,9 @@ class _ActionBtn extends StatelessWidget {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(vertical: 8),
         decoration: BoxDecoration(
-          color: active ? kGreenSub.withValues(alpha: 0.5) : kBg,
+          color: active ? kGreenSub.withOpacity(0.5) : kBg,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: active ? kGreen.withValues(alpha: 0.3) : kBorder, width: active ? 1 : 0.5),
+          border: Border.all(color: active ? kGreen.withOpacity(0.3) : kBorder, width: active ? 1 : 0.5),
         ),
         child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
           if (loading)
