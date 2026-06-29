@@ -384,4 +384,94 @@ class GitHubService {
     }
     return '$_raw/$promptPath';
   }
+
+  // ── OpenSpace ─────────────────────────────────────────────────────────────
+
+  Future<List<dynamic>> fetchOpenspaceImages() async {
+    try {
+      final r = await _client.get(
+        Uri.parse('$_api/contents/openspace'),
+        headers: _pat.isNotEmpty ? _h : {},
+      );
+      if (r.statusCode == 404) return [];
+      if (r.statusCode != 200) throw Exception('Erreur ${r.statusCode}');
+      final files = (jsonDecode(r.body) as List<dynamic>)
+          .where((f) {
+            final name = (f['name'] as String).toLowerCase();
+            return name.endsWith('.png') || name.endsWith('.jpg') ||
+                   name.endsWith('.jpeg') || name.endsWith('.gif') || name.endsWith('.webp');
+          })
+          .toList();
+      return files.map((f) {
+        final name = f['name'] as String;
+        final slug = name.replaceAll(' ', '_').replaceAll(RegExp(r'\.[^.]+$'), '');
+        return {
+          'name': name,
+          'mention': '@$slug',
+          'rawUrl': '$_raw/openspace/$name',
+          'sha': f['sha'] as String? ?? '',
+        };
+      }).toList();
+    } catch (e) {
+      throw Exception('Chargement OpenSpace : $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> uploadOpenspaceImage(
+    String originalName,
+    Uint8List bytes,
+    List<dynamic> existingImages,
+  ) async {
+    if (_pat.isEmpty) throw Exception('Token GitHub manquant');
+
+    final ext = originalName.contains('.')
+        ? originalName.substring(originalName.lastIndexOf('.')).toLowerCase()
+        : '.jpg';
+    final baseName = originalName.contains('.')
+        ? originalName.substring(0, originalName.lastIndexOf('.'))
+        : originalName;
+    final safeBase = baseName.replaceAll(RegExp(r'[^a-zA-Z0-9_\-]'), '_');
+
+    final existingNames = existingImages
+        .map((f) => (f is Map ? f['name'] : '') as String)
+        .toSet();
+
+    String finalName = '$safeBase$ext';
+    if (existingNames.contains(finalName)) {
+      int counter = 1;
+      while (existingNames.contains('${safeBase}_$counter$ext')) {
+        counter++;
+      }
+      finalName = '${safeBase}_$counter$ext';
+    }
+
+    final path = 'openspace/$finalName';
+    final body = jsonEncode({
+      'message': 'OpenSpace: add $finalName',
+      'content': base64Encode(bytes),
+    });
+    final r = await _client.put(Uri.parse('$_api/contents/$path'), headers: _h, body: body);
+    if (r.statusCode != 201 && r.statusCode != 200) {
+      throw Exception('Upload échoué : ${r.statusCode}');
+    }
+    final resp = jsonDecode(r.body) as Map<String, dynamic>;
+    final sha = (resp['content'] as Map<String, dynamic>)['sha'] as String? ?? '';
+    final slug = finalName.replaceAll(RegExp(r'\.[^.]+$'), '');
+    return {
+      'name': finalName,
+      'mention': '@$slug',
+      'rawUrl': '$_raw/$path',
+      'sha': sha,
+    };
+  }
+
+  Future<void> deleteOpenspaceImage(String name, String sha) async {
+    if (_pat.isEmpty) throw Exception('Token GitHub manquant');
+    final r = await _client.delete(
+      Uri.parse('$_api/contents/openspace/$name'),
+      headers: _h,
+      body: jsonEncode({'message': 'OpenSpace: remove $name', 'sha': sha}),
+    );
+    if (r.statusCode != 200) throw Exception('Suppression échouée : ${r.statusCode}');
+  }
 }
