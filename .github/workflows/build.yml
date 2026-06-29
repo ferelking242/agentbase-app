@@ -1,4 +1,4 @@
-name: 🚀 Build iOS & Android
+name: 🚀 Build & Deploy
 
 on:
   push:
@@ -7,7 +7,59 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
 jobs:
+  # ─────────────────────────────────────────────
+  #  WEB BUILD + GITHUB PAGES
+  # ─────────────────────────────────────────────
+  build-web:
+    name: 🌐 Flutter Web → GitHub Pages
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.0'
+          channel: stable
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build Web
+        run: flutter build web --release --base-href /agentbase/
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+
+  deploy-pages:
+    name: 🚀 Deploy to ferelking242.github.io/agentbase
+    runs-on: ubuntu-latest
+    needs: build-web
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
   # ─────────────────────────────────────────────
   #  ANDROID BUILD
   # ─────────────────────────────────────────────
@@ -35,25 +87,17 @@ jobs:
       - name: Precache Android artifacts
         run: flutter precache --android
 
-      - name: Generate correct Gradle files from Flutter template
+      - name: Generate Gradle files from Flutter template
         run: |
-          # Create a temp Flutter project to get correct 3.22.0 Gradle files
           flutter create --org com.ferelking242 --project-name agentbase_temp /tmp/flutter_template
-          # Copy template Gradle files (guaranteed compatible with this Flutter version)
           cp /tmp/flutter_template/android/settings.gradle android/
           cp /tmp/flutter_template/android/build.gradle android/
           cp /tmp/flutter_template/android/app/build.gradle android/app/
           cp /tmp/flutter_template/android/gradle/wrapper/gradle-wrapper.properties android/gradle/wrapper/
-          # Patch app/build.gradle namespace to our package
           sed -i 's/com\.ferelking242\.agentbase_temp/com.ferelking242.agentbase/g' android/app/build.gradle
           sed -i 's/applicationId "com\.ferelking242\.agentbase_temp"/applicationId "com.ferelking242.agentbase"/g' android/app/build.gradle
-          # Create local.properties for CI (needed by settings.gradle)
           echo "flutter.sdk=$FLUTTER_ROOT" > android/local.properties
           echo "sdk.dir=$ANDROID_HOME" >> android/local.properties
-          echo "✅ Generated Gradle files:"
-          cat android/settings.gradle
-          echo "---"
-          head -20 android/app/build.gradle
 
       - name: Get dependencies
         run: flutter pub get
@@ -62,7 +106,7 @@ jobs:
         run: flutter analyze --no-fatal-infos
         continue-on-error: true
 
-      - name: Build APK (release, no sign)
+      - name: Build APK (release)
         run: flutter build apk --release
 
       - name: Upload APK
@@ -72,7 +116,7 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30
 
-      - name: Build APK arm64 split
+      - name: Build APK arm64
         run: flutter build apk --release --target-platform android-arm64 --split-per-abi
         continue-on-error: true
 
@@ -85,7 +129,7 @@ jobs:
         continue-on-error: true
 
   # ─────────────────────────────────────────────
-  #  IOS BUILD (no codesign — TrollStore ready)
+  #  IOS BUILD
   # ─────────────────────────────────────────────
   build-ios:
     name: 🍎 iOS IPA (no sign)
@@ -115,7 +159,7 @@ jobs:
       - name: Build iOS (no codesign)
         run: flutter build ios --release --no-codesign
 
-      - name: Package IPA (TrollStore compatible)
+      - name: Package IPA
         run: |
           mkdir -p Payload
           cp -r build/ios/iphoneos/Runner.app Payload/
@@ -135,7 +179,7 @@ jobs:
   summary:
     name: 📋 Build Summary
     runs-on: ubuntu-latest
-    needs: [build-android, build-ios]
+    needs: [build-web, build-android, build-ios]
     if: always()
 
     steps:
@@ -145,7 +189,9 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Platform | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| 🌐 Web (GitHub Pages) | ${{ needs.build-web.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| 🤖 Android APK | ${{ needs.build-android.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| 🍎 iOS IPA (TrollStore) | ${{ needs.build-ios.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🍎 iOS IPA | ${{ needs.build-ios.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🌐 **Live:** https://ferelking242.github.io/agentbase" >> $GITHUB_STEP_SUMMARY
           echo "Commit: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
