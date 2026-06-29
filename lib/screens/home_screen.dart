@@ -12,8 +12,10 @@ import '../theme.dart';
 import '../widgets/app_components.dart';
 import '../widgets/send_sheet.dart';
 import '../widgets/prompts_sheet.dart';
+import '../services/notification_service.dart';
 import 'fullscreen_composer.dart';
 import 'image_edit_screen.dart';
+import 'notifications_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final GitHubService github;
@@ -261,6 +263,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       setState(() { _msgs.add(_Msg.promptSaved(saved)); _sending = false; });
       widget.onPromptSaved?.call(saved);
+      NotificationService.notifyPromptSaved(promptName: name, link: link);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -345,6 +348,8 @@ class _HomeScreenState extends State<HomeScreen> {
         Text('AgentBase', style: GoogleFonts.inter(color: kText, fontSize: 16, fontWeight: FontWeight.w600, letterSpacing: -0.4)),
         const Spacer(),
         _IconBtn(icon: Icons.sync_rounded, onTap: widget.onSyncRequest, tooltip: 'Sync'),
+        const SizedBox(width: 6),
+        const NotificationBell(),
         const SizedBox(width: 6),
         _IconBtn(icon: Icons.article_outlined, onTap: _showPromptsSheet, tooltip: 'Prompts',
           badge: widget.prompts.isNotEmpty ? '${widget.prompts.length}' : null),
@@ -577,10 +582,17 @@ class _FileChip extends StatelessWidget {
               ])),
       if (file.isImage) Positioned(
         bottom: 3, left: 3,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-          decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(4)),
-          child: const Icon(Icons.edit, size: 9, color: Colors.white70),
+        child: GestureDetector(
+          onTap: onLongPress,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            decoration: BoxDecoration(color: Colors.black70, borderRadius: BorderRadius.circular(6)),
+            child: Row(mainAxisSize: MainAxisSize.min, children: const [
+              Icon(Icons.edit, size: 12, color: Colors.white),
+              SizedBox(width: 3),
+              Text('Éditer', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600)),
+            ]),
+          ),
         ),
       ),
       Positioned(
