@@ -6,6 +6,8 @@ import '../models/saved_prompt.dart';
 import '../theme.dart';
 import '../widgets/app_components.dart';
 import 'home_screen.dart';
+import 'notifications_screen.dart';
+import 'openspace_screen.dart';
 import 'rooms_screen.dart';
 import 'prompts_screen.dart';
 import 'settings_screen.dart';
@@ -79,6 +81,20 @@ class _ShellScreenState extends State<ShellScreen> {
     )).then((_) => _loadPrompts());
   }
 
+  void _navigateToOpenSpace() {
+    Navigator.pop(context);
+    Navigator.push(context, MaterialPageRoute(
+      builder: (_) => OpenspaceScreen(github: widget.github),
+    ));
+  }
+
+  void _navigateToNotifications() {
+    Navigator.pop(context);
+    Navigator.push(context, MaterialPageRoute(
+      builder: (_) => const NotificationsScreen(),
+    ));
+  }
+
   void _navigateToSettings() {
     Navigator.pop(context);
     Navigator.push(context, MaterialPageRoute(
@@ -95,6 +111,8 @@ class _ShellScreenState extends State<ShellScreen> {
       promptCount: _prompts.length,
       onRooms: _navigateToRooms,
       onPrompts: _navigateToPrompts,
+      onOpenSpace: _navigateToOpenSpace,
+      onNotifications: _navigateToNotifications,
       onSettings: _navigateToSettings,
     ),
     body: HomeScreen(
@@ -114,6 +132,8 @@ class _AppDrawer extends StatelessWidget {
   final int promptCount;
   final VoidCallback onRooms;
   final VoidCallback onPrompts;
+  final VoidCallback onOpenSpace;
+  final VoidCallback onNotifications;
   final VoidCallback onSettings;
 
   const _AppDrawer({
@@ -121,6 +141,8 @@ class _AppDrawer extends StatelessWidget {
     required this.promptCount,
     required this.onRooms,
     required this.onPrompts,
+    required this.onOpenSpace,
+    required this.onNotifications,
     required this.onSettings,
   });
 
@@ -165,6 +187,16 @@ class _AppDrawer extends StatelessWidget {
             label: 'Prompts',
             onTap: onPrompts,
             badge: promptCount > 0 ? '$promptCount' : null,
+          ),
+          _DrawerItem(
+            icon: Icons.cloud_outlined,
+            label: 'OpenSpace',
+            onTap: onOpenSpace,
+          ),
+          _DrawerItem(
+            icon: Icons.notifications_outlined,
+            label: 'Notifications',
+            onTap: onNotifications,
           ),
 
           const Spacer(),
