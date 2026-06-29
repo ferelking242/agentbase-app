@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/github_service.dart';
+import '../services/notification_service.dart';
 import '../services/prefs_service.dart';
 import '../theme.dart';
 import '../widgets/app_components.dart';
@@ -17,24 +18,29 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final _tokenCtrl = TextEditingController();
+  final _ntfyCtrl  = TextEditingController();
   bool _showToken = false;
   bool _saving = false;
   bool _testing = false;
   bool _testPassed = false;
+  bool _testingNtfy = false;
   String? _testError;
 
   @override
   void initState() {
     super.initState();
-    // Load current PAT into the field
     PrefsService.getPat().then((p) {
       if (mounted && p != null) setState(() => _tokenCtrl.text = p);
+    });
+    NotificationService.getTopic().then((t) {
+      if (mounted && t != null) setState(() => _ntfyCtrl.text = t);
     });
   }
 
   @override
   void dispose() {
     _tokenCtrl.dispose();
+    _ntfyCtrl.dispose();
     super.dispose();
   }
 
@@ -67,6 +73,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _testNtfy() async {
+    final topic = _ntfyCtrl.text.trim();
+    if (topic.isEmpty) {
+      showAppSnack(context, 'Entre un topic ntfy d\'abord', isError: true);
+      return;
+    }
+    setState(() => _testingNtfy = true);
+    final ok = await NotificationService.sendPush(
+      title: '✅ AgentBase — Test OK',
+      body: 'Les notifications push fonctionnent !',
+      topic: topic,
+    );
+    if (!mounted) return;
+    setState(() => _testingNtfy = false);
+    showAppSnack(context, ok ? 'Notification envoyée !' : 'Erreur — vérifie le topic', isError: !ok);
+  }
+
   Future<void> _save() async {
     if (!_isConfigured) {
       showAppSnack(context, 'Token requis', isError: true);
@@ -76,6 +99,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final pat = _tokenCtrl.text.trim();
     await PrefsService.savePat(pat);
     widget.github.setPat(pat);
+    final ntfyTopic = _ntfyCtrl.text.trim();
+    if (ntfyTopic.isNotEmpty) await NotificationService.saveTopic(ntfyTopic);
     setState(() => _saving = false);
     if (mounted) showAppSnack(context, 'Token sauvegardé');
   }
@@ -242,6 +267,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ]),
               ),
             ],
+            const SizedBox(height: 20),
+
+            // Notifications ntfy section
+            const AppSectionHeader('Notifications Push'),
+            AppCard(
+              padding: const EdgeInsets.all(14),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  Container(
+                    width: 30, height: 30,
+                    decoration: BoxDecoration(color: kAccentSub, borderRadius: BorderRadius.circular(8)),
+                    child: const Icon(Icons.notifications_outlined, size: 15, color: kAccentMid),
+                  ),
+                  const SizedBox(width: 10),
+                  Text('Topic ntfy.sh', style: GoogleFonts.inter(color: kText, fontSize: 13.5, fontWeight: FontWeight.w500)),
+                ]),
+                const SizedBox(height: 12),
+                AppInput(
+                  controller: _ntfyCtrl,
+                  hint: 'ex: agentbase-monnom',
+                  onChanged: (_) => setState(() {}),
+                ),
+                const SizedBox(height: 8),
+                Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Icon(Icons.info_outline, size: 13, color: kMuted2),
+                  const SizedBox(width: 6),
+                  Expanded(child: Text(
+                    'Installe l\'app ntfy.sh et abonne-toi à ce topic pour recevoir des notifs push quand un prompt est sauvegardé. Ton topic doit être unique.',
+                    style: GoogleFonts.inter(color: kMuted2, fontSize: 11.5, height: 1.4),
+                  )),
+                ]),
+                const SizedBox(height: 12),
+                AppButton(
+                  label: _testingNtfy ? 'Envoi…' : 'Tester la notification',
+                  icon: Icons.send_outlined,
+                  variant: AppButtonVariant.outline,
+                  loading: _testingNtfy,
+                  fullWidth: true,
+                  onTap: (_testingNtfy || _ntfyCtrl.text.trim().isEmpty) ? null : _testNtfy,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                ),
+              ]),
+            ),
             const SizedBox(height: 20),
 
             // About
