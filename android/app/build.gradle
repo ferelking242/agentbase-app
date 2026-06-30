@@ -17,7 +17,7 @@ apply plugin: 'kotlin-android'
 apply from: "$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"
 
 android {
-    namespace "com.ferelking242.agentbase"
+    namespace "com.aivos.agentbase"
     compileSdkVersion 34
 
     compileOptions {
@@ -34,7 +34,7 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.ferelking242.agentbase"
+        applicationId "com.aivos.agentbase"
         minSdkVersion 21
         targetSdkVersion 34
         versionCode flutterVersionCode.toInteger()

@@ -293,12 +293,14 @@ class AppEmptyState extends StatelessWidget {
   final IconData icon;
   final String title;
   final String? subtitle;
+  final Widget? action;
 
   const AppEmptyState({
     super.key,
     required this.icon,
     required this.title,
     this.subtitle,
+    this.action,
   });
 
   @override
@@ -322,6 +324,10 @@ class AppEmptyState extends StatelessWidget {
           Text(subtitle!,
             style: GoogleFonts.inter(color: kMuted2, fontSize: 12.5),
             textAlign: TextAlign.center),
+        ],
+        if (action != null) ...[
+          const SizedBox(height: 16),
+          action!,
         ],
       ],
     ),

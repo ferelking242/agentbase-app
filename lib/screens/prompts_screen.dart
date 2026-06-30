@@ -170,7 +170,7 @@ class _PromptsScreenState extends State<PromptsScreen> {
           AppInput(
             controller: ctrl, autofocus: true,
             hint: 'Ex: dev, urgent, IA',
-            onSubmitted: (_) => Navigator.pop(_, true),
+            onSubmitted: (v) => Navigator.pop(context, true),
           ),
           const SizedBox(height: 6),
           Text('Sépare les tags par des virgules', style: GoogleFonts.inter(color: kMuted2, fontSize: 11.5)),
