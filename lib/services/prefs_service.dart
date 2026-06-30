@@ -11,15 +11,23 @@ class PrefsService {
     final p = await SharedPreferences.getInstance();
     return p.getString(_kPat);
   }
-
   static Future<void> savePat(String pat) async {
     final p = await SharedPreferences.getInstance();
     await p.setString(_kPat, pat);
   }
-
   static Future<void> clearPat() async {
     final p = await SharedPreferences.getInstance();
     await p.remove(_kPat);
+  }
+
+  // ── Generic string key-value ──────────────────────────────────────────────
+  static Future<String?> getString(String key) async {
+    final p = await SharedPreferences.getInstance();
+    return p.getString(key);
+  }
+  static Future<void> setString(String key, String value) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setString(key, value);
   }
 
   // ── Next sequential number ───────────────────────────────────────────────
@@ -37,28 +45,22 @@ class PrefsService {
     if (raw == null) return [];
     return SavedPrompt.listFromJson(raw);
   }
-
   static Future<SavedPrompt> addPrompt(SavedPrompt prompt) async {
     final p = await SharedPreferences.getInstance();
     int num = prompt.number;
     if (num == 0) num = await _nextNumber();
-    final numbered = SavedPrompt(
-      id: prompt.id, name: prompt.name, link: prompt.link,
-      created: prompt.created, number: num,
-    );
+    final numbered = SavedPrompt(id: prompt.id, name: prompt.name, link: prompt.link, created: prompt.created, number: num);
     final existing = await getPrompts();
     existing.insert(0, numbered);
     await p.setString(_kPrompts, SavedPrompt.listToJson(existing));
     return numbered;
   }
-
   static Future<void> deletePrompt(String id) async {
     final p = await SharedPreferences.getInstance();
     final existing = await getPrompts();
     existing.removeWhere((pr) => pr.id == id);
     await p.setString(_kPrompts, SavedPrompt.listToJson(existing));
   }
-
   static Future<void> updatePromptName(String id, String newName) async {
     final p = await SharedPreferences.getInstance();
     final prompts = await getPrompts();
@@ -67,7 +69,6 @@ class PrefsService {
     prompts[idx] = prompts[idx].copyWith(name: newName);
     await p.setString(_kPrompts, SavedPrompt.listToJson(prompts));
   }
-
   static Future<void> replaceAll(List<SavedPrompt> prompts) async {
     final p = await SharedPreferences.getInstance();
     await p.setString(_kPrompts, SavedPrompt.listToJson(prompts));
