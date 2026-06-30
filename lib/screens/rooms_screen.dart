@@ -47,7 +47,9 @@ class _RoomsScreenState extends State<RoomsScreen> {
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDlgState) => AlertDialog(
+        builder: (ctx, setDlgState) {
+          WidgetsBinding.instance.addPostFrameCallback((_) => nameCtrl.addListener(() { if (ctx.mounted) setDlgState(() {}); }));
+          return AlertDialog(
           backgroundColor: kCard,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: kBorder, width: 0.5)),
           title: Text('Nouvelle Room', style: GoogleFonts.inter(color: kText, fontSize: 16, fontWeight: FontWeight.w700)),
@@ -81,7 +83,8 @@ class _RoomsScreenState extends State<RoomsScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
             ),
           ],
-        ),
+        );
+        },
       ),
     );
 
