@@ -46,7 +46,15 @@ class _HomeScreenState extends State<HomeScreen> {
   final FocusNode _focus = FocusNode();
   bool _sending = false;
   List<AttachedFile> _files = [];
+
+  // Single @ mention (local files)
   String? _mentionQuery;
+
+  // Double @@ mention (OpenSpace)
+  String? _openSpaceQuery;
+  List<dynamic> _openSpaceImages = [];
+  bool _openSpaceLoading = false;
+
   List<Room> _rooms = [];
 
   @override
@@ -75,13 +83,41 @@ class _HomeScreenState extends State<HomeScreen> {
   void _onCtrlChange() {
     final pos = _ctrl.selection.baseOffset;
     if (!_ctrl.selection.isValid || pos < 0 || pos > _ctrl.text.length) {
-      if (_mentionQuery != null) setState(() => _mentionQuery = null);
+      if (_mentionQuery != null || _openSpaceQuery != null) {
+        setState(() { _mentionQuery = null; _openSpaceQuery = null; });
+      }
       return;
     }
     final before = _ctrl.text.substring(0, pos);
-    final match  = RegExp(r'@(\w*)$').firstMatch(before);
-    final q      = match?.group(1);
-    if (q != _mentionQuery) setState(() => _mentionQuery = q);
+
+    // Check for @@ (OpenSpace) first — must come before single @ check
+    final osMatch = RegExp(r'@@(\w*)$').firstMatch(before);
+    if (osMatch != null) {
+      final q = osMatch.group(1)!;
+      if (_openSpaceQuery != q || _openSpaceImages.isEmpty) {
+        setState(() { _openSpaceQuery = q; _mentionQuery = null; });
+        _loadOpenSpaceIfNeeded();
+      }
+      return;
+    }
+
+    // Check for single @ (local files)
+    final match = RegExp(r'(?<!@)@(\w*)$').firstMatch(before);
+    final q = match?.group(1);
+    if (q != _mentionQuery || _openSpaceQuery != null) {
+      setState(() { _mentionQuery = q; _openSpaceQuery = null; });
+    }
+  }
+
+  Future<void> _loadOpenSpaceIfNeeded() async {
+    if (_openSpaceLoading || _openSpaceImages.isNotEmpty) return;
+    setState(() => _openSpaceLoading = true);
+    try {
+      final imgs = await widget.github.fetchOpenspaceImages();
+      if (mounted) setState(() { _openSpaceImages = imgs; _openSpaceLoading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _openSpaceLoading = false);
+    }
   }
 
   List<AttachedFile> get _mentionSuggestions {
@@ -90,19 +126,39 @@ class _HomeScreenState extends State<HomeScreen> {
     return _files.where((f) => f.name.toLowerCase().contains(_mentionQuery!.toLowerCase())).toList();
   }
 
+  List<dynamic> get _openSpaceSuggestions {
+    if (_openSpaceQuery == null) return [];
+    if (_openSpaceQuery!.isEmpty) return _openSpaceImages;
+    final q = _openSpaceQuery!.toLowerCase();
+    return _openSpaceImages.where((img) {
+      final name = (img['name'] as String? ?? '').toLowerCase();
+      final mention = (img['mention'] as String? ?? '').toLowerCase();
+      return name.contains(q) || mention.contains(q);
+    }).toList();
+  }
+
   void _insertMention(AttachedFile f) {
     final pos = _ctrl.selection.baseOffset;
     if (pos < 0) return;
     final before = _ctrl.text.substring(0, pos);
     final after  = _ctrl.text.substring(pos);
     final match  = RegExp(r'@(\w*)$').firstMatch(before);
-    final mention  = '@${f.name.replaceAll(' ', '_').replaceAll('.', '_')}';
+    final mention = '@${f.name.replaceAll(' ', '_').replaceAll('.', '_')}';
     final newBefore = match != null ? before.substring(0, match.start) + mention : before + mention;
-    _ctrl.value = TextEditingValue(
-      text: newBefore + after,
-      selection: TextSelection.collapsed(offset: newBefore.length),
-    );
+    _ctrl.value = TextEditingValue(text: newBefore + after, selection: TextSelection.collapsed(offset: newBefore.length));
     setState(() => _mentionQuery = null);
+  }
+
+  void _insertOpenSpaceMention(Map<String, dynamic> img) {
+    final pos = _ctrl.selection.baseOffset;
+    if (pos < 0) return;
+    final before = _ctrl.text.substring(0, pos);
+    final after  = _ctrl.text.substring(pos);
+    final match  = RegExp(r'@@(\w*)$').firstMatch(before);
+    final mention = img['mention'] as String? ?? '@image';
+    final newBefore = match != null ? before.substring(0, match.start) + mention : before + mention;
+    _ctrl.value = TextEditingValue(text: newBefore + after, selection: TextSelection.collapsed(offset: newBefore.length));
+    setState(() { _openSpaceQuery = null; });
   }
 
   void _showAttachMenu() {
@@ -145,20 +201,34 @@ class _HomeScreenState extends State<HomeScreen> {
       if (imgs.isEmpty) return;
       for (int i = 0; i < imgs.length; i++) {
         final bytes = await imgs[i].readAsBytes();
-        final rawName = imgs[i].name;
-        final name = _isTempName(rawName) ? _stampName(i) : rawName;
+        // Try name from .name, fallback to path basename, then stamp
+        final fromName = imgs[i].name;
+        final fromPath = imgs[i].path.split('/').last.split('\\').last;
+        String name;
+        if (!_isTempName(fromName)) {
+          name = fromName;
+        } else if (!_isTempName(fromPath)) {
+          name = fromPath;
+        } else {
+          name = _stampName(i);
+        }
         if (mounted) setState(() => _files.insert(0, AttachedFile(name: name, bytes: bytes, isImage: true)));
       }
     } catch (_) {}
   }
 
   bool _isTempName(String n) {
+    if (n.isEmpty) return true;
     final l = n.toLowerCase();
-    return l.isEmpty ||
-        l.startsWith('image_picker_') ||
-        l.startsWith('picker_') ||
-        l.startsWith('scaled_') ||
-        RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}').hasMatch(l);
+    // UUID-style names
+    if (RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}').hasMatch(l)) return true;
+    // Known picker cache patterns
+    if (RegExp(r'^image_picker_[0-9a-f]').hasMatch(l)) return true;
+    if (RegExp(r'^scaled_[0-9a-f]').hasMatch(l)) return true;
+    if (RegExp(r'^img_[0-9]{10,}\.').hasMatch(l)) return true;
+    // Purely numeric names (timestamp-only)
+    if (RegExp(r'^\d{10,}\.(jpg|jpeg|png|webp)$').hasMatch(l)) return true;
+    return false;
   }
 
   String _stampName(int idx) {
@@ -319,10 +389,14 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final isEmpty  = _msgs.isEmpty && !_sending;
     final mentions = _mentionSuggestions;
+    final osMentions = _openSpaceSuggestions;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       _buildHeader(),
       Expanded(child: isEmpty ? _buildHome() : _buildMsgs()),
-      if (_mentionQuery != null && mentions.isNotEmpty) _buildMentionOverlay(mentions),
+      // OpenSpace @@ overlay (priority)
+      if (_openSpaceQuery != null) _buildOpenSpaceOverlay(osMentions),
+      // Local @ overlay
+      if (_openSpaceQuery == null && _mentionQuery != null && mentions.isNotEmpty) _buildMentionOverlay(mentions),
       _buildInput(),
     ]);
   }
@@ -356,6 +430,87 @@ class _HomeScreenState extends State<HomeScreen> {
       ]),
     ),
   );
+
+  // ── @@ OpenSpace overlay ───────────────────────────────────────────────────
+  Widget _buildOpenSpaceOverlay(List<dynamic> suggestions) {
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 240),
+      decoration: BoxDecoration(
+        color: kCard,
+        border: const Border(
+          top: BorderSide(color: kBorder, width: 0.5),
+          bottom: BorderSide(color: kBorder, width: 0.5),
+        ),
+      ),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        // Header
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
+          child: Row(children: [
+            Container(width: 20, height: 20, decoration: BoxDecoration(color: kAccentSub, borderRadius: BorderRadius.circular(5)),
+              child: const Icon(Icons.photo_library_outlined, size: 12, color: kAccentMid)),
+            const SizedBox(width: 8),
+            Text('OpenSpace', style: GoogleFonts.inter(color: kText, fontSize: 12, fontWeight: FontWeight.w600)),
+            const SizedBox(width: 4),
+            Text('(@@)', style: GoogleFonts.inter(color: kMuted2, fontSize: 11)),
+            const Spacer(),
+            GestureDetector(
+              onTap: () => setState(() => _openSpaceQuery = null),
+              child: const Icon(Icons.close, size: 14, color: kMuted2),
+            ),
+          ]),
+        ),
+        const Divider(height: 1, color: kBorder),
+        if (_openSpaceLoading)
+          const Padding(
+            padding: EdgeInsets.all(20),
+            child: CircularProgressIndicator(color: kAccent, strokeWidth: 2),
+          )
+        else if (suggestions.isEmpty)
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Text(
+              _openSpaceImages.isEmpty ? 'Aucune image dans OpenSpace' : 'Aucun résultat pour "${_openSpaceQuery}"',
+              style: GoogleFonts.inter(color: kMuted2, fontSize: 12),
+            ),
+          )
+        else
+          Flexible(
+            child: ListView.builder(
+              shrinkWrap: true, padding: EdgeInsets.zero,
+              itemCount: suggestions.length,
+              itemBuilder: (_, i) {
+                final img = suggestions[i] as Map<String, dynamic>;
+                final name = img['name'] as String? ?? '';
+                final mention = img['mention'] as String? ?? '';
+                final rawUrl = img['rawUrl'] as String? ?? '';
+                return ListTile(
+                  dense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                  leading: ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: rawUrl.isNotEmpty
+                        ? Image.network(rawUrl, width: 40, height: 40, fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(width: 40, height: 40, color: kCard2,
+                              child: const Icon(Icons.broken_image_outlined, size: 18, color: kMuted2)))
+                        : Container(width: 40, height: 40, color: kCard2,
+                            child: const Icon(Icons.image_outlined, size: 18, color: kMuted2)),
+                  ),
+                  title: RichText(text: TextSpan(
+                    style: GoogleFonts.inter(color: kText, fontSize: 13),
+                    children: [
+                      TextSpan(text: mention, style: GoogleFonts.inter(color: kAccentMid, fontWeight: FontWeight.w700, fontSize: 13)),
+                    ],
+                  )),
+                  subtitle: Text(name, style: GoogleFonts.inter(color: kMuted2, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  onTap: () => _insertOpenSpaceMention(img),
+                );
+              },
+            ),
+          ),
+      ]),
+    );
+  }
 
   Widget _buildMentionOverlay(List<AttachedFile> suggestions) => Container(
     constraints: const BoxConstraints(maxHeight: 180),
@@ -400,18 +555,14 @@ class _HomeScreenState extends State<HomeScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(children: [
         Row(children: [
-          Expanded(child: Padding(
-            padding: const EdgeInsets.only(right: 6),
-            child: _ActionCard(icon: Icons.photo_library_outlined, label: 'Ajouter image', subtitle: 'Galerie', color: kAccentMid, onTap: _pickFromGallery),
-          )),
+          Expanded(child: Padding(padding: const EdgeInsets.only(right: 6),
+            child: _ActionCard(icon: Icons.photo_library_outlined, label: 'Ajouter image', subtitle: 'Galerie', color: kAccentMid, onTap: _pickFromGallery))),
           Expanded(child: _ActionCard(icon: Icons.open_in_full_rounded, label: 'Plein écran', subtitle: 'Composer', color: kAccentMid, onTap: _openFullscreen)),
         ]),
         const SizedBox(height: 6),
         Row(children: [
-          Expanded(child: Padding(
-            padding: const EdgeInsets.only(right: 6),
-            child: _ActionCard(icon: Icons.sync_rounded, label: 'Synchroniser', subtitle: 'Prompts', color: kGreen, onTap: widget.onSyncRequest),
-          )),
+          Expanded(child: Padding(padding: const EdgeInsets.only(right: 6),
+            child: _ActionCard(icon: Icons.sync_rounded, label: 'Synchroniser', subtitle: 'Prompts', color: kGreen, onTap: widget.onSyncRequest))),
           Expanded(child: _ActionCard(icon: Icons.workspaces_outlined, label: 'Mes Rooms', subtitle: 'Naviguer', color: kYellow, onTap: widget.onOpenDrawer)),
         ]),
       ]),
@@ -424,11 +575,9 @@ class _HomeScreenState extends State<HomeScreen> {
     Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(children: [
-        Expanded(child: Padding(
-          padding: const EdgeInsets.only(right: 6),
+        Expanded(child: Padding(padding: const EdgeInsets.only(right: 6),
           child: _SuggCard(icon: Icons.lightbulb_outline, label: 'Analyser un problème',
-            onTap: () { _ctrl.text = 'Analyser ce problème : '; _focus.requestFocus(); setState(() {}); }),
-        )),
+            onTap: () { _ctrl.text = 'Analyser ce problème : '; _focus.requestFocus(); setState(() {}); }))),
         Expanded(child: _SuggCard(icon: Icons.rule_outlined, label: 'Créer une règle agent',
           onTap: () { _ctrl.text = 'Créer une règle agent : '; _focus.requestFocus(); setState(() {}); })),
       ]),
@@ -482,7 +631,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 style: GoogleFonts.inter(color: kText, fontSize: 14, height: 1.5),
                 cursorColor: kAccent, cursorWidth: 1.5,
                 decoration: InputDecoration(
-                  hintText: 'Écris ton prompt… ou tape @',
+                  hintText: 'Écris ton prompt… ou tape @ ou @@',
                   hintStyle: GoogleFonts.inter(color: kMuted2, fontSize: 14),
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
@@ -538,7 +687,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ListTile(
             leading: Container(width: 36, height: 36, decoration: BoxDecoration(color: kAccentSub, borderRadius: BorderRadius.circular(8)), child: const Icon(Icons.edit_outlined, size: 18, color: kAccentMid)),
             title: Text('Éditer l\'image', style: GoogleFonts.inter(color: kText, fontSize: 14)),
-            subtitle: Text('Luminosité · Contraste · Dessin', style: GoogleFonts.inter(color: kMuted2, fontSize: 11.5)),
+            subtitle: Text('Réglages · Rogner · Dessin · Rotation', style: GoogleFonts.inter(color: kMuted2, fontSize: 11.5)),
             onTap: () { Navigator.pop(context); _editImage(i); },
           ),
         ListTile(
@@ -642,7 +791,6 @@ class _IconBtn extends StatelessWidget {
   );
 }
 
-// ── _ActionCard ───────────────────────────────────────────────────────────────
 class _ActionCard extends StatelessWidget {
   final IconData icon; final String label, subtitle; final Color color; final VoidCallback onTap;
   const _ActionCard({required this.icon, required this.label, required this.subtitle, required this.color, required this.onTap});
@@ -665,7 +813,6 @@ class _ActionCard extends StatelessWidget {
   );
 }
 
-// ── _SuggCard ─────────────────────────────────────────────────────────────────
 class _SuggCard extends StatelessWidget {
   final IconData icon; final String label; final VoidCallback onTap;
   const _SuggCard({required this.icon, required this.label, required this.onTap});
@@ -684,7 +831,6 @@ class _SuggCard extends StatelessWidget {
   );
 }
 
-// ── _AttachOption ─────────────────────────────────────────────────────────────
 class _AttachOption extends StatelessWidget {
   final IconData icon; final String title, subtitle; final VoidCallback onTap;
   const _AttachOption({required this.icon, required this.title, required this.subtitle, required this.onTap});
@@ -740,30 +886,23 @@ class _UserBubble extends StatelessWidget {
     return found;
   }
 
-  // Builds bubble text content: text segments + image blocks in a Column
   Widget _buildContent() {
     final text = msg.text;
     final pattern = RegExp(r'@(\w+)');
     final matches = pattern.allMatches(text).toList();
-
     final textStyle = GoogleFonts.inter(color: Colors.white, fontSize: 13.5, height: 1.5);
-
     if (matches.isEmpty) return Text(text, style: textStyle);
-
     final seenFiles = <String>{};
     final widgets = <Widget>[];
     int lastEnd = 0;
-
     for (final match in matches) {
       if (match.start > lastEnd) {
         final t = text.substring(lastEnd, match.start).trimRight();
         if (t.isNotEmpty) widgets.add(Text(t, style: textStyle));
       }
-
       final f = _findFile(match.group(1)!);
       if (f != null && f.isImage) {
         if (seenFiles.contains(f.name)) {
-          // Already shown — reference chip
           widgets.add(Container(
             margin: const EdgeInsets.symmetric(vertical: 2),
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -772,15 +911,11 @@ class _UserBubble extends StatelessWidget {
           ));
         } else {
           seenFiles.add(f.name);
-          // Image on its own line — FULL width, below preceding text
           widgets.add(Padding(
             padding: const EdgeInsets.symmetric(vertical: 6),
             child: GestureDetector(
               onTap: () => onImageTap(f.bytes, f.name),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: Image.memory(f.bytes, width: double.infinity, fit: BoxFit.cover),
-              ),
+              child: ClipRRect(borderRadius: BorderRadius.circular(10), child: Image.memory(f.bytes, width: double.infinity, fit: BoxFit.cover)),
             ),
           ));
         }
@@ -789,12 +924,10 @@ class _UserBubble extends StatelessWidget {
       }
       lastEnd = match.end;
     }
-
     if (lastEnd < text.length) {
       final t = text.substring(lastEnd).trimLeft();
       if (t.isNotEmpty) widgets.add(Padding(padding: const EdgeInsets.only(top: 4), child: Text(t, style: textStyle)));
     }
-
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: widgets);
   }
 
@@ -808,7 +941,6 @@ class _UserBubble extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.only(bottom: 10),
           child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            // Non-mentioned images as thumbnail strip
             if (msg.files.any((f) => f.isImage && !mentioned.contains(f.name)))
               Padding(
                 padding: const EdgeInsets.only(bottom: 4),
@@ -821,7 +953,6 @@ class _UserBubble extends StatelessWidget {
                   ).toList(),
                 ),
               ),
-            // Non-image file chips
             ...msg.files.where((f) => !f.isImage).map((f) => Container(
               margin: const EdgeInsets.only(bottom: 4),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -832,7 +963,6 @@ class _UserBubble extends StatelessWidget {
                 Text(f.name, style: GoogleFonts.inter(color: kMuted, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
               ]),
             )),
-            // Main text bubble
             if (msg.text.isNotEmpty)
               Container(
                 width: double.infinity,
