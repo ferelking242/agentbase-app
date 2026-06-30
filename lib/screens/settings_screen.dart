@@ -2,16 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/github_service.dart';
-import '../services/notification_service.dart';
 import '../services/prefs_service.dart';
 import '../theme.dart';
 import '../widgets/app_components.dart';
 
 class SettingsScreen extends StatefulWidget {
   final GitHubService github;
-
   const SettingsScreen({super.key, required this.github});
-
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
@@ -38,15 +35,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.dispose();
   }
 
-  bool get _hasChanges => _tokenCtrl.text.isNotEmpty;
-
   bool get _isConfigured => _tokenCtrl.text.trim().isNotEmpty;
 
   Future<void> _testConnection() async {
-    if (!_isConfigured) {
-      showAppSnack(context, 'Entre ton token d\'abord', isError: true);
-      return;
-    }
+    if (!_isConfigured) { showAppSnack(context, 'Entre ton token d\'abord', isError: true); return; }
     setState(() { _testing = true; _testPassed = false; _testError = null; });
     try {
       final tmp = GitHubService(owner: widget.github.owner, repo: widget.github.repo);
@@ -68,10 +60,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _save() async {
-    if (!_isConfigured) {
-      showAppSnack(context, 'Token requis', isError: true);
-      return;
-    }
+    if (!_isConfigured) { showAppSnack(context, 'Token requis', isError: true); return; }
     setState(() => _saving = true);
     final pat = _tokenCtrl.text.trim();
     await PrefsService.savePat(pat);
@@ -95,11 +84,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Row(children: [
               GestureDetector(
                 onTap: () => Navigator.pop(context),
-                child: Container(
-                  width: 34, height: 34,
+                child: Container(width: 34, height: 34,
                   decoration: BoxDecoration(color: kCard, borderRadius: BorderRadius.circular(8), border: Border.all(color: kBorder, width: 0.5)),
-                  child: const Icon(Icons.arrow_back_ios_new, size: 13, color: kMuted),
-                ),
+                  child: const Icon(Icons.arrow_back_ios_new, size: 13, color: kMuted)),
               ),
               const SizedBox(width: 12),
               Text('Paramètres', style: GoogleFonts.inter(color: kText, fontSize: 15, fontWeight: FontWeight.w600, letterSpacing: -0.3)),
@@ -126,23 +113,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     color: connected ? kGreen.withOpacity(0.15) : kRed.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(9),
                   ),
-                  child: Icon(
-                    connected ? Icons.cloud_done_outlined : Icons.cloud_off_outlined,
-                    size: 18, color: connected ? kGreen : kRed,
-                  ),
+                  child: Icon(connected ? Icons.cloud_done_outlined : Icons.cloud_off_outlined,
+                    size: 18, color: connected ? kGreen : kRed),
                 ),
                 const SizedBox(width: 12),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(connected ? 'GitHub connecté' : 'Non configuré',
+                    style: GoogleFonts.inter(color: kText, fontSize: 13.5, fontWeight: FontWeight.w600)),
                   Text(
-                    connected ? 'GitHub connecté' : 'Non configuré',
-                    style: GoogleFonts.inter(color: kText, fontSize: 13.5, fontWeight: FontWeight.w600),
-                  ),
-                  Text(
-                    connected
-                        ? '${widget.github.owner}/${widget.github.repo}'
-                        : 'Configure ton token GitHub pour commencer',
-                    style: GoogleFonts.inter(color: kMuted2, fontSize: 12),
-                  ),
+                    connected ? '${widget.github.owner}/${widget.github.repo}' : 'Configure ton token GitHub pour commencer',
+                    style: GoogleFonts.inter(color: kMuted2, fontSize: 12)),
                 ])),
                 if (_testPassed)
                   Container(
@@ -160,11 +140,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               padding: const EdgeInsets.all(14),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(children: [
-                  Container(
-                    width: 30, height: 30,
-                    decoration: BoxDecoration(color: kAccentSub, borderRadius: BorderRadius.circular(8)),
-                    child: const Icon(Icons.vpn_key_outlined, size: 15, color: kAccentMid),
-                  ),
+                  Container(width: 30, height: 30, decoration: BoxDecoration(color: kAccentSub, borderRadius: BorderRadius.circular(8)),
+                    child: const Icon(Icons.vpn_key_outlined, size: 15, color: kAccentMid)),
                   const SizedBox(width: 10),
                   Text('Personal Access Token', style: GoogleFonts.inter(color: kText, fontSize: 13.5, fontWeight: FontWeight.w500)),
                   const Spacer(),
@@ -184,16 +161,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Row(children: [
                   const Icon(Icons.info_outline, size: 13, color: kMuted2),
                   const SizedBox(width: 6),
-                  Expanded(child: Text(
-                    'Nécessite les scopes : repo, contents:write',
-                    style: GoogleFonts.inter(color: kMuted2, fontSize: 11.5),
-                  )),
+                  Expanded(child: Text('Nécessite les scopes : repo, contents:write',
+                    style: GoogleFonts.inter(color: kMuted2, fontSize: 11.5))),
                 ]),
               ]),
             ),
             const SizedBox(height: 10),
 
-            // Repo info (read-only)
+            // Repo info
             const AppSectionHeader('Dépôt GitHub'),
             AppCard(
               padding: EdgeInsets.zero,
@@ -204,7 +179,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const AppDivider(),
                 ListTile(
                   contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
-                  leading: Container(width: 30, height: 30, decoration: BoxDecoration(color: kCard2, borderRadius: BorderRadius.circular(8)), child: const Icon(Icons.content_copy, size: 14, color: kMuted)),
+                  leading: Container(width: 30, height: 30, decoration: BoxDecoration(color: kCard2, borderRadius: BorderRadius.circular(8)),
+                    child: const Icon(Icons.content_copy, size: 14, color: kMuted)),
                   title: Text('Copier owner/repo', style: GoogleFonts.inter(color: kText, fontSize: 13.5)),
                   trailing: const Icon(Icons.chevron_right, size: 16, color: kMuted2),
                   onTap: () {
@@ -230,11 +206,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 8),
               Container(
                 padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: kRedSub.withOpacity(0.5),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: kRed.withOpacity(0.2), width: 0.5),
-                ),
+                decoration: BoxDecoration(color: kRedSub.withOpacity(0.5), borderRadius: BorderRadius.circular(8), border: Border.all(color: kRed.withOpacity(0.2), width: 0.5)),
                 child: Row(children: [
                   const Icon(Icons.error_outline, size: 14, color: kRed),
                   const SizedBox(width: 8),
@@ -244,45 +216,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
             const SizedBox(height: 20),
 
-            // Notifications ntfy section
-            const AppSectionHeader('Notifications Push'),
+            // Notifications section
+            const AppSectionHeader('Notifications'),
             AppCard(
               padding: const EdgeInsets.all(14),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  Container(
-                    width: 30, height: 30,
-                    decoration: BoxDecoration(color: kAccentSub, borderRadius: BorderRadius.circular(8)),
-                    child: const Icon(Icons.notifications_outlined, size: 15, color: kAccentMid),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Container(width: 30, height: 30, decoration: BoxDecoration(color: kAccentSub, borderRadius: BorderRadius.circular(8)),
+                  child: const Icon(Icons.notifications_outlined, size: 15, color: kAccentMid)),
+                const SizedBox(width: 12),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('Notifications in-app', style: GoogleFonts.inter(color: kText, fontSize: 13.5, fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Tes notifications sont stockées localement dans l\'app. Clique sur la cloche 🔔 en haut pour les consulter.',
+                    style: GoogleFonts.inter(color: kMuted2, fontSize: 12, height: 1.45),
                   ),
-                  const SizedBox(width: 10),
-                  Text('Topic ntfy.sh', style: GoogleFonts.inter(color: kText, fontSize: 13.5, fontWeight: FontWeight.w500)),
-                ]),
-                const SizedBox(height: 12),
-                AppInput(
-                  controller: _ntfyCtrl,
-                  hint: 'ex: agentbase-monnom',
-                  onChanged: (_) => setState(() {}),
-                ),
-                const SizedBox(height: 8),
-                Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Icon(Icons.info_outline, size: 13, color: kMuted2),
-                  const SizedBox(width: 6),
-                  Expanded(child: Text(
-                    'Installe l\'app ntfy.sh et abonne-toi à ce topic pour recevoir des notifs push quand un prompt est sauvegardé. Ton topic doit être unique.',
-                    style: GoogleFonts.inter(color: kMuted2, fontSize: 11.5, height: 1.4),
-                  )),
-                ]),
-                const SizedBox(height: 12),
-                AppButton(
-                  label: _testingNtfy ? 'Envoi…' : 'Tester la notification',
-                  icon: Icons.send_outlined,
-                  variant: AppButtonVariant.outline,
-                  loading: _testingNtfy,
-                  fullWidth: true,
-                  onTap: (_testingNtfy || _ntfyCtrl.text.trim().isEmpty) ? null : _testNtfy,
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                ),
+                ])),
               ]),
             ),
             const SizedBox(height: 20),
@@ -305,7 +254,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 }
 
-// ── _InfoRow ──────────────────────────────────────────────────────────────────
 class _InfoRow extends StatelessWidget {
   final IconData icon; final String label, value;
   const _InfoRow({required this.icon, required this.label, required this.value});
