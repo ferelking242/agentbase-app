@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:share_plus/share_plus.dart';
 import '../models/saved_prompt.dart';
 import '../services/github_service.dart';
 import '../services/prefs_service.dart';
 import '../theme.dart';
 import '../widgets/app_components.dart';
 import 'prompt_detail_screen.dart';
+import 'prompt_history_screen.dart';
 
 class PromptsScreen extends StatefulWidget {
   final GitHubService github;
@@ -20,32 +22,44 @@ enum _SortMode { newest, oldest }
 enum _DateFilter { all, today, week, month }
 
 class _PromptsScreenState extends State<PromptsScreen> {
-  final _search = TextEditingController();
+  final _searchCtrl = TextEditingController();
   _SortMode _sort = _SortMode.newest;
   _DateFilter _dateFilter = _DateFilter.all;
   bool _syncing = false;
   bool _loading = true;
   List<SavedPrompt> _local = [];
+  bool _showFavoritesOnly = false;
+  String? _tagFilter;
 
   @override
   void initState() {
     super.initState();
-    _search.addListener(() => setState(() {}));
+    _searchCtrl.addListener(() => setState(() {}));
     _loadFromPrefs();
   }
 
   @override
-  void dispose() { _search.dispose(); super.dispose(); }
+  void dispose() { _searchCtrl.dispose(); super.dispose(); }
 
   Future<void> _loadFromPrefs() async {
     final list = await PrefsService.getPrompts();
     if (mounted) setState(() { _local = list; _loading = false; });
   }
 
+  // ── All unique tags from local prompts ────────────────────────────────────
+  List<String> get _allTags {
+    final set = <String>{};
+    for (final p in _local) set.addAll(p.tags);
+    final list = set.toList()..sort();
+    return list;
+  }
+
   List<SavedPrompt> get _filtered {
-    final q = _search.text.trim().toLowerCase();
+    final q = _searchCtrl.text.trim().toLowerCase();
     final now = DateTime.now();
-    return _local.where((p) {
+    var list = _local.where((p) {
+      if (_showFavoritesOnly && !p.isFavorite) return false;
+      if (_tagFilter != null && !p.tags.contains(_tagFilter)) return false;
       if (q.isNotEmpty && !p.name.toLowerCase().contains(q) && !p.id.contains(q)) return false;
       switch (_dateFilter) {
         case _DateFilter.today:
@@ -57,12 +71,14 @@ class _PromptsScreenState extends State<PromptsScreen> {
         case _DateFilter.all:
           return true;
       }
-    }).toList()
-      ..sort((a, b) => _sort == _SortMode.newest
-          ? b.created.compareTo(a.created)
-          : a.created.compareTo(b.created));
+    }).toList();
+    list.sort((a, b) => _sort == _SortMode.newest
+        ? b.created.compareTo(a.created)
+        : a.created.compareTo(b.created));
+    return list;
   }
 
+  // ── Sync ──────────────────────────────────────────────────────────────────
   Future<void> _sync() async {
     if (!widget.github.hasPat) {
       showAppSnack(context, 'Configure ton token dans Paramètres', isError: true);
@@ -86,11 +102,32 @@ class _PromptsScreenState extends State<PromptsScreen> {
     }
   }
 
+  // ── Delete ────────────────────────────────────────────────────────────────
   Future<void> _delete(SavedPrompt p) async {
     await PrefsService.deletePrompt(p.id);
+    if (!mounted) return;
     setState(() => _local.removeWhere((x) => x.id == p.id));
+    showAppSnack(context, '"${p.name}" supprimé');
   }
 
+  Future<void> _undoDelete(SavedPrompt p) async {
+    await PrefsService.addPrompt(p);
+    if (!mounted) return;
+    final updated = await PrefsService.getPrompts();
+    setState(() => _local = updated);
+  }
+
+  // ── Favorite ──────────────────────────────────────────────────────────────
+  Future<void> _toggleFavorite(SavedPrompt p) async {
+    final nowFav = await PrefsService.toggleFavorite(p.id);
+    if (!mounted) return;
+    setState(() {
+      final idx = _local.indexWhere((x) => x.id == p.id);
+      if (idx != -1) _local[idx] = _local[idx].copyWith(isFavorite: nowFav);
+    });
+  }
+
+  // ── Open detail ───────────────────────────────────────────────────────────
   Future<void> _openDetail(SavedPrompt p) async {
     final result = await Navigator.push<PromptDetailResult>(
       context,
@@ -103,382 +140,431 @@ class _PromptsScreenState extends State<PromptsScreen> {
       await PrefsService.updatePromptName(p.id, result.newName!);
       setState(() {
         final idx = _local.indexWhere((x) => x.id == p.id);
-        if (idx != -1) _local[idx] = p.copyWith(name: result.newName);
+        if (idx != -1) _local[idx] = p.copyWith(name: result.newName!);
       });
     }
   }
 
+  // ── Share ─────────────────────────────────────────────────────────────────
+  void _share(SavedPrompt p) {
+    Share.share('${p.name}\n${p.link}', subject: p.name);
+  }
+
+  // ── Copy MD ───────────────────────────────────────────────────────────────
+  Future<void> _copyMd(SavedPrompt p) async {
+    final md = '[${p.name}](${p.link})';
+    await Clipboard.setData(ClipboardData(text: md));
+    if (mounted) showAppSnack(context, 'Lien Markdown copié !');
+  }
+
+  // ── Edit tags ─────────────────────────────────────────────────────────────
+  Future<void> _editTags(SavedPrompt p) async {
+    final ctrl = TextEditingController(text: p.tags.join(', '));
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: kCard,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: const BorderSide(color: kBorder)),
+        title: Text('Tags', style: GoogleFonts.inter(color: kText, fontSize: 15, fontWeight: FontWeight.w600)),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          AppInput(
+            controller: ctrl, autofocus: true,
+            hint: 'Ex: dev, urgent, IA',
+            onSubmitted: (_) => Navigator.pop(_, true),
+          ),
+          const SizedBox(height: 6),
+          Text('Sépare les tags par des virgules', style: GoogleFonts.inter(color: kMuted2, fontSize: 11.5)),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(_, false), child: Text('Annuler', style: GoogleFonts.inter(color: kMuted))),
+          AppButton(label: 'OK', onTap: () => Navigator.pop(_, true), padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8)),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (ok == true) {
+      final tags = ctrl.text.split(',').map((t) => t.trim()).where((t) => t.isNotEmpty).toList();
+      await PrefsService.setPromptTags(p.id, tags);
+      if (!mounted) return;
+      setState(() {
+        final idx = _local.indexWhere((x) => x.id == p.id);
+        if (idx != -1) _local[idx] = _local[idx].copyWith(tags: tags);
+      });
+    }
+  }
+
+  // ── UI ────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    final filtered = _filtered;
+    final items = _filtered;
     return Scaffold(
       backgroundColor: kBg,
       body: SafeArea(
         bottom: false,
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          // Header
-          _Header(
-            count: _local.length,
-            syncing: _syncing,
-            onSync: _sync,
-            onBack: () => Navigator.pop(context),
-          ),
-
-          // Search + filters
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-            child: Column(children: [
-              // Search
-              Container(
-                decoration: BoxDecoration(
-                  color: kCard,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: kBorder, width: 0.5),
-                ),
-                child: TextField(
-                  controller: _search,
-                  style: GoogleFonts.inter(color: kText, fontSize: 14),
-                  cursorColor: kAccent,
-                  cursorWidth: 1.5,
-                  decoration: InputDecoration(
-                    hintText: 'Rechercher un prompt…',
-                    hintStyle: GoogleFonts.inter(color: kMuted2, fontSize: 14),
-                    prefixIcon: const Icon(Icons.search, size: 18, color: kMuted2),
-                    suffixIcon: _search.text.isNotEmpty
-                        ? GestureDetector(onTap: _search.clear, child: const Icon(Icons.close, size: 16, color: kMuted2))
-                        : null,
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                    isDense: true,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              // Sort + date filter
-              Row(children: [
-                // Sort toggle
-                _FilterBtn(
-                  label: _sort == _SortMode.newest ? '↓ Récent' : '↑ Ancien',
-                  active: false,
-                  onTap: () => setState(() => _sort = _sort == _SortMode.newest ? _SortMode.oldest : _SortMode.newest),
-                ),
-                const SizedBox(width: 6),
-                // Date filters
-                ..._DateFilter.values.map((f) => Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: _FilterBtn(
-                    label: _filterLabel(f),
-                    active: _dateFilter == f,
-                    onTap: () => setState(() => _dateFilter = f),
-                  ),
-                )),
-              ]),
-            ]),
-          ),
-          const SizedBox(height: 10),
-
-          // List
-          Expanded(
-            child: _loading
-                ? const AppLoadingIndicator()
-                : filtered.isEmpty
-                ? _local.isEmpty
-                    ? AppEmptyState(
-                        icon: Icons.article_outlined,
-                        title: 'Aucun prompt',
-                        subtitle: widget.github.hasPat ? 'Appuie sur Sync pour récupérer' : 'Configure ton token dans Paramètres',
-                      )
-                    : const AppEmptyState(
-                        icon: Icons.search_off,
-                        title: 'Aucun résultat',
-                        subtitle: 'Essaie d\'autres filtres',
-                      )
-                : ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                    itemCount: filtered.length,
+        child: Column(children: [
+          _buildHeader(),
+          _buildFiltersRow(),
+          if (_allTags.isNotEmpty) _buildTagsRow(),
+          Expanded(child: _loading
+            ? const Center(child: AppLoadingIndicator())
+            : items.isEmpty
+              ? AppEmptyState(
+                  icon: Icons.description_outlined,
+                  title: _searchCtrl.text.isNotEmpty ? 'Aucun résultat' : 'Aucun prompt',
+                  subtitle: _searchCtrl.text.isNotEmpty
+                      ? 'Essaie un autre terme'
+                      : 'Synchronise depuis GitHub ou crée un prompt depuis l\'accueil',
+                  action: widget.github.hasPat && _searchCtrl.text.isEmpty
+                      ? AppButton(label: 'Synchroniser', loading: _syncing, onTap: _sync,
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 9))
+                      : null,
+                )
+              : RefreshIndicator(
+                  color: kAccent, backgroundColor: kCard,
+                  onRefresh: _sync,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                    itemCount: items.length,
                     itemBuilder: (_, i) => _PromptCard(
-                      prompt: filtered[i],
-                      github: widget.github,
-                      onTap: () => _openDetail(filtered[i]),
-                      onDelete: () => _delete(filtered[i]),
+                      prompt: items[i],
+                      onTap: () => _openDetail(items[i]),
+                      onDelete: () => _swipeDelete(items[i]),
+                      onFavorite: () => _toggleFavorite(items[i]),
+                      onCopyMd: () => _copyMd(items[i]),
+                      onShare: () => _share(items[i]),
+                      onEditTags: () => _editTags(items[i]),
+                      onHistory: () => Navigator.push(context, MaterialPageRoute(
+                        builder: (_) => PromptHistoryScreen(prompt: items[i], github: widget.github))),
                     ),
                   ),
+                ),
           ),
         ]),
       ),
     );
   }
 
-  String _filterLabel(_DateFilter f) {
-    switch (f) {
-      case _DateFilter.all:   return 'Tout';
-      case _DateFilter.today: return 'Auj.';
-      case _DateFilter.week:  return '7 jours';
-      case _DateFilter.month: return '30 jours';
-    }
-  }
-}
-
-// ── Header ────────────────────────────────────────────────────────────────────
-class _Header extends StatelessWidget {
-  final int count;
-  final bool syncing;
-  final VoidCallback onSync;
-  final VoidCallback onBack;
-
-  const _Header({required this.count, required this.syncing, required this.onSync, required this.onBack});
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-    decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: kBorder, width: 0.5))),
-    child: Row(children: [
-      GestureDetector(
-        onTap: onBack,
-        child: Container(
-          width: 34, height: 34,
-          decoration: BoxDecoration(color: kCard, borderRadius: BorderRadius.circular(8), border: Border.all(color: kBorder, width: 0.5)),
-          child: const Icon(Icons.arrow_back_ios_new, size: 13, color: kMuted),
-        ),
+  Future<void> _swipeDelete(SavedPrompt p) async {
+    final saved = p;
+    await _delete(p);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      backgroundColor: kCard2,
+      behavior: SnackBarBehavior.floating,
+      content: Text('"${saved.name}" supprimé', style: GoogleFonts.inter(color: kText, fontSize: 13)),
+      action: SnackBarAction(
+        label: 'Annuler',
+        textColor: kAccentMid,
+        onPressed: () => _undoDelete(saved),
       ),
-      const SizedBox(width: 12),
-      Text('Prompts', style: GoogleFonts.inter(color: kText, fontSize: 20, fontWeight: FontWeight.w700, letterSpacing: -0.5)),
-      const SizedBox(width: 8),
-      if (count > 0) AppBadge('$count'),
-      const Spacer(),
-      GestureDetector(
-        onTap: syncing ? null : onSync,
-        child: Container(
-          width: 34, height: 34,
-          decoration: BoxDecoration(color: kCard, borderRadius: BorderRadius.circular(8), border: Border.all(color: kBorder, width: 0.5)),
-          child: syncing
-              ? const Center(child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 1.5, color: kAccent)))
-              : const Icon(Icons.sync_rounded, size: 17, color: kMuted),
+      duration: const Duration(seconds: 4),
+    ));
+  }
+
+  Widget _buildHeader() => Container(
+    padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+    decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: kBorder, width: 0.5))),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        GestureDetector(
+          onTap: () => Navigator.pop(context),
+          child: Container(width: 34, height: 34,
+            decoration: BoxDecoration(color: kCard, borderRadius: BorderRadius.circular(8), border: Border.all(color: kBorder, width: 0.5)),
+            child: const Icon(Icons.arrow_back_ios_new, size: 13, color: kMuted)),
+        ),
+        const SizedBox(width: 12),
+        Text('Prompts', style: GoogleFonts.inter(color: kText, fontSize: 15, fontWeight: FontWeight.w700, letterSpacing: -0.3)),
+        const Spacer(),
+        // Favorites toggle
+        GestureDetector(
+          onTap: () => setState(() { _showFavoritesOnly = !_showFavoritesOnly; }),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            width: 34, height: 34,
+            decoration: BoxDecoration(
+              color: _showFavoritesOnly ? const Color(0xFFF59E0B).withOpacity(0.15) : kCard,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: _showFavoritesOnly ? const Color(0xFFF59E0B).withOpacity(0.5) : kBorder, width: _showFavoritesOnly ? 1 : 0.5),
+            ),
+            child: Icon(
+              _showFavoritesOnly ? Icons.star_rounded : Icons.star_border_rounded,
+              size: 17, color: _showFavoritesOnly ? const Color(0xFFF59E0B) : kMuted,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        // Sync button
+        GestureDetector(
+          onTap: _syncing ? null : _sync,
+          child: Container(width: 34, height: 34,
+            decoration: BoxDecoration(color: kCard, borderRadius: BorderRadius.circular(8), border: Border.all(color: kBorder, width: 0.5)),
+            child: _syncing
+              ? const Padding(padding: EdgeInsets.all(9), child: CircularProgressIndicator(strokeWidth: 1.5, color: kAccent))
+              : const Icon(Icons.sync_rounded, size: 17, color: kMuted)),
+        ),
+        const SizedBox(width: 8),
+        // Total badge
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          decoration: BoxDecoration(color: kAccentSub, borderRadius: BorderRadius.circular(6)),
+          child: Text('${_local.length}', style: GoogleFonts.inter(color: kAccentMid, fontSize: 12, fontWeight: FontWeight.w700)),
+        ),
+      ]),
+      const SizedBox(height: 10),
+      AppInput(
+        hint: 'Rechercher un prompt…',
+        controller: _searchCtrl,
+        suffix: GestureDetector(
+          onTap: _searchCtrl.text.isNotEmpty ? () { _searchCtrl.clear(); setState(() {}); } : null,
+          child: Icon(_searchCtrl.text.isNotEmpty ? Icons.close : Icons.search, size: 16, color: kMuted2),
         ),
       ),
     ]),
   );
+
+  Widget _buildFiltersRow() => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+    child: Row(children: [
+      // Sort
+      GestureDetector(
+        onTap: () => setState(() => _sort = _sort == _SortMode.newest ? _SortMode.oldest : _SortMode.newest),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(color: kCard, borderRadius: BorderRadius.circular(7), border: Border.all(color: kBorder, width: 0.5)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(_sort == _SortMode.newest ? Icons.arrow_downward : Icons.arrow_upward, size: 13, color: kMuted2),
+            const SizedBox(width: 5),
+            Text(_sort == _SortMode.newest ? 'Plus récents' : 'Plus anciens', style: GoogleFonts.inter(color: kMuted2, fontSize: 12)),
+          ]),
+        ),
+      ),
+      const SizedBox(width: 8),
+      // Date filter chips
+      ..._DateFilter.values.map((f) {
+        final label = switch (f) {
+          _DateFilter.all   => 'Tous',
+          _DateFilter.today => "Aujourd'hui",
+          _DateFilter.week  => '7j',
+          _DateFilter.month => '30j',
+        };
+        final selected = _dateFilter == f;
+        return GestureDetector(
+          onTap: () => setState(() => _dateFilter = f),
+          child: Container(
+            margin: const EdgeInsets.only(left: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: selected ? kAccentSub : kCard,
+              borderRadius: BorderRadius.circular(7),
+              border: Border.all(color: selected ? kAccent.withOpacity(0.4) : kBorder, width: selected ? 1 : 0.5),
+            ),
+            child: Text(label, style: GoogleFonts.inter(
+              color: selected ? kAccentMid : kMuted2,
+              fontSize: 12, fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+            )),
+          ),
+        );
+      }),
+    ]),
+  );
+
+  Widget _buildTagsRow() => SizedBox(
+    height: 36,
+    child: ListView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+      children: [
+        GestureDetector(
+          onTap: () => setState(() => _tagFilter = null),
+          child: Container(
+            margin: const EdgeInsets.only(right: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: _tagFilter == null ? kAccentSub : kCard,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: _tagFilter == null ? kAccent.withOpacity(0.4) : kBorder, width: _tagFilter == null ? 1 : 0.5),
+            ),
+            child: Text('# Tous', style: GoogleFonts.inter(
+              color: _tagFilter == null ? kAccentMid : kMuted2,
+              fontSize: 11.5, fontWeight: _tagFilter == null ? FontWeight.w600 : FontWeight.w400,
+            )),
+          ),
+        ),
+        ..._allTags.map((t) {
+          final selected = _tagFilter == t;
+          return GestureDetector(
+            onTap: () => setState(() => _tagFilter = selected ? null : t),
+            child: Container(
+              margin: const EdgeInsets.only(right: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: selected ? kAccentSub : kCard,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: selected ? kAccent.withOpacity(0.4) : kBorder, width: selected ? 1 : 0.5),
+              ),
+              child: Text('# $t', style: GoogleFonts.inter(
+                color: selected ? kAccentMid : kMuted2,
+                fontSize: 11.5, fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+              )),
+            ),
+          );
+        }),
+      ],
+    ),
+  );
 }
 
-// ── FilterBtn ─────────────────────────────────────────────────────────────────
-class _FilterBtn extends StatelessWidget {
+// ── PromptCard ────────────────────────────────────────────────────────────────
+class _PromptCard extends StatelessWidget {
+  final SavedPrompt prompt;
+  final VoidCallback onTap, onDelete, onFavorite, onCopyMd, onShare, onEditTags, onHistory;
+
+  const _PromptCard({
+    required this.prompt,
+    required this.onTap,
+    required this.onDelete,
+    required this.onFavorite,
+    required this.onCopyMd,
+    required this.onShare,
+    required this.onEditTags,
+    required this.onHistory,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final p = prompt;
+    return Dismissible(
+      key: ValueKey(p.id),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: kRed.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: kRed.withOpacity(0.2), width: 0.5),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          const Icon(Icons.delete_outline, color: kRed, size: 18),
+          const SizedBox(width: 4),
+          Text('Supprimer', style: GoogleFonts.inter(color: kRed, fontSize: 12.5, fontWeight: FontWeight.w600)),
+        ]),
+      ),
+      confirmDismiss: (_) async {
+        onDelete();
+        return false; // We handle deletion manually (with undo)
+      },
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          decoration: BoxDecoration(
+            color: kCard,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: kBorder, width: 0.5),
+          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            // ── Main row ─────────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                // Number badge
+                Container(
+                  width: 36, height: 36,
+                  margin: const EdgeInsets.only(top: 2),
+                  decoration: BoxDecoration(color: kAccentSub, borderRadius: BorderRadius.circular(8)),
+                  child: Center(child: Text('#${p.number}', style: GoogleFonts.inter(color: kAccentMid, fontSize: 10.5, fontWeight: FontWeight.w700))),
+                ),
+                const SizedBox(width: 10),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(
+                    p.name.isNotEmpty ? p.name : p.id,
+                    style: GoogleFonts.inter(color: kText, fontSize: 13.5, fontWeight: FontWeight.w500, height: 1.3),
+                    maxLines: 2, overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Row(children: [
+                    const Icon(Icons.schedule, size: 11, color: kMuted2),
+                    const SizedBox(width: 3),
+                    Text(_relativeDate(p.created), style: GoogleFonts.inter(color: kMuted2, fontSize: 11.5)),
+                  ]),
+                ])),
+                const SizedBox(width: 6),
+                // Favorite star
+                GestureDetector(
+                  onTap: onFavorite,
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(
+                      p.isFavorite ? Icons.star_rounded : Icons.star_border_rounded,
+                      size: 18,
+                      color: p.isFavorite ? const Color(0xFFF59E0B) : kMuted2,
+                    ),
+                  ),
+                ),
+              ]),
+            ),
+            // ── Tags ─────────────────────────────────────────────────────
+            if (p.tags.isNotEmpty) Padding(
+              padding: const EdgeInsets.fromLTRB(60, 6, 14, 0),
+              child: Wrap(spacing: 5, runSpacing: 4, children: p.tags.map((t) => Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: kAccentSub.withOpacity(0.6),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: kAccent.withOpacity(0.15), width: 0.5),
+                ),
+                child: Text('# $t', style: GoogleFonts.inter(color: kAccentMid, fontSize: 10.5, fontWeight: FontWeight.w500)),
+              )).toList()),
+            ),
+            // ── Action buttons ────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+              child: Row(children: [
+                _Btn(icon: Icons.copy_outlined, label: 'Copier MD', onTap: onCopyMd),
+                const SizedBox(width: 6),
+                _Btn(icon: Icons.share_outlined, label: 'Partager', onTap: onShare),
+                const SizedBox(width: 6),
+                _Btn(icon: Icons.label_outline, label: 'Tags', onTap: onEditTags),
+                const SizedBox(width: 6),
+                _Btn(icon: Icons.history_rounded, label: 'Historique', onTap: onHistory),
+              ]),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  String _relativeDate(DateTime d) {
+    final diff = DateTime.now().difference(d);
+    if (diff.inMinutes < 1) return 'À l\'instant';
+    if (diff.inHours < 1) return 'Il y a ${diff.inMinutes}min';
+    if (diff.inDays < 1) return 'Il y a ${diff.inHours}h';
+    if (diff.inDays < 7) return 'Il y a ${diff.inDays}j';
+    if (diff.inDays < 30) return 'Il y a ${(diff.inDays / 7).floor()}sem';
+    return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
+  }
+}
+
+class _Btn extends StatelessWidget {
+  final IconData icon;
   final String label;
-  final bool active;
   final VoidCallback onTap;
-  const _FilterBtn({required this.label, required this.active, required this.onTap});
+  const _Btn({required this.icon, required this.label, required this.onTap});
 
   @override
   Widget build(BuildContext context) => GestureDetector(
     onTap: onTap,
     child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
-      decoration: BoxDecoration(
-        color: active ? kAccentSub : kCard,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: active ? kAccentMid.withOpacity(0.4) : kBorder, width: active ? 1 : 0.5),
-      ),
-      child: Text(label, style: GoogleFonts.inter(
-        color: active ? kAccentMid : kMuted,
-        fontSize: 12, fontWeight: active ? FontWeight.w600 : FontWeight.w400,
-      )),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(color: kCard2, borderRadius: BorderRadius.circular(6), border: Border.all(color: kBorder, width: 0.5)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 12, color: kMuted),
+        const SizedBox(width: 4),
+        Text(label, style: GoogleFonts.inter(color: kMuted, fontSize: 11, fontWeight: FontWeight.w500)),
+      ]),
     ),
   );
 }
-
-// ── Prompt Card ───────────────────────────────────────────────────────────────
-class _PromptCard extends StatefulWidget {
-  final SavedPrompt prompt;
-  final GitHubService github;
-  final VoidCallback onTap;
-  final VoidCallback onDelete;
-  const _PromptCard({required this.prompt, required this.github, required this.onTap, required this.onDelete});
-  @override State<_PromptCard> createState() => _PromptCardState();
-}
-
-class _PromptCardState extends State<_PromptCard> {
-  bool _copiedLink = false;
-  bool _copiedMd   = false;
-  bool _loadingMd  = false;
-
-  Future<void> _copyMd() async {
-    if (_loadingMd) return;
-    setState(() => _loadingMd = true);
-    try {
-      final content = await widget.github.fetchPromptContent(widget.prompt.id);
-      if (!mounted) return;
-      if (content == null) { showAppSnack(context, 'Introuvable sur GitHub', isError: true); setState(() => _loadingMd = false); return; }
-      await Clipboard.setData(ClipboardData(text: content));
-      setState(() { _loadingMd = false; _copiedMd = true; });
-      Future.delayed(const Duration(seconds: 2), () { if (mounted) setState(() => _copiedMd = false); });
-    } catch (_) { if (mounted) setState(() => _loadingMd = false); }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final p = widget.prompt;
-    final num = p.number > 0 ? p.number : null;
-    return GestureDetector(
-      onTap: widget.onTap,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        decoration: BoxDecoration(
-          color: kCard,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: kBorder, width: 0.5),
-        ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          // Top row
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
-            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              if (num != null) ...[
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(color: kAccentSub, borderRadius: BorderRadius.circular(6)),
-                  child: Text('#$num', style: GoogleFonts.inter(color: kAccentMid, fontSize: 12, fontWeight: FontWeight.w700)),
-                ),
-                const SizedBox(width: 10),
-              ] else ...[
-                Container(
-                  width: 30, height: 30,
-                  decoration: BoxDecoration(color: kBg, borderRadius: BorderRadius.circular(8), border: Border.all(color: kBorder, width: 0.5)),
-                  child: const Icon(Icons.article_outlined, size: 15, color: kMuted2),
-                ),
-                const SizedBox(width: 10),
-              ],
-              Expanded(child: Text(p.name,
-                style: GoogleFonts.inter(color: kText, fontSize: 14, fontWeight: FontWeight.w600, letterSpacing: -0.2),
-                maxLines: 2, overflow: TextOverflow.ellipsis)),
-              const SizedBox(width: 8),
-              GestureDetector(
-                onTap: widget.onDelete,
-                child: const Padding(padding: EdgeInsets.all(2), child: Icon(Icons.close, size: 14, color: kMuted2)),
-              ),
-            ]),
-          ),
-
-          // Meta row
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
-            child: Row(children: [
-              _MetaChip(icon: Icons.fingerprint, label: p.id.length > 16 ? p.id.substring(0, 16) : p.id),
-              const SizedBox(width: 8),
-              _MetaChip(icon: Icons.calendar_today_outlined, label: _fmtDate(p.created)),
-              const SizedBox(width: 8),
-              _MetaChip(icon: Icons.access_time_outlined, label: _fmtTime(p.created)),
-            ]),
-          ),
-
-          // Link
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-              decoration: BoxDecoration(color: kBg, borderRadius: BorderRadius.circular(6), border: Border.all(color: kBorder, width: 0.5)),
-              child: Row(children: [
-                const Icon(Icons.link, size: 12, color: kMuted2),
-                const SizedBox(width: 6),
-                Expanded(child: Text(
-                  p.link.replaceFirst('https://raw.githubusercontent.com/', ''),
-                  style: GoogleFonts.robotoMono(color: kBlue, fontSize: 10.5),
-                  maxLines: 1, overflow: TextOverflow.ellipsis,
-                )),
-              ]),
-            ),
-          ),
-
-          // Action buttons
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
-            child: Row(children: [
-              _ActionBtn(
-                label: _copiedLink ? 'Copié !' : 'Lien',
-                icon: _copiedLink ? Icons.check : Icons.link_outlined,
-                active: _copiedLink,
-                onTap: () async {
-                  await Clipboard.setData(ClipboardData(text: p.link));
-                  setState(() => _copiedLink = true);
-                  Future.delayed(const Duration(seconds: 2), () { if (mounted) setState(() => _copiedLink = false); });
-                },
-              ),
-              const SizedBox(width: 8),
-              _ActionBtn(
-                label: _copiedMd ? 'Copié !' : 'Contenu MD',
-                icon: _copiedMd ? Icons.check : Icons.content_copy_outlined,
-                active: _copiedMd,
-                loading: _loadingMd,
-                onTap: _loadingMd ? null : _copyMd,
-              ),
-              const SizedBox(width: 8),
-              _ActionBtn(
-                label: 'Voir',
-                icon: Icons.open_in_new_rounded,
-                active: false,
-                onTap: widget.onTap,
-                expand: false,
-              ),
-            ]),
-          ),
-        ]),
-      ),
-    );
-  }
-
-  String _fmtDate(DateTime d) =>
-      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
-
-  String _fmtTime(DateTime d) =>
-      '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}:${d.second.toString().padLeft(2, '0')}';
-}
-
-class _MetaChip extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  const _MetaChip({required this.icon, required this.label});
-
-  @override
-  Widget build(BuildContext context) => Row(mainAxisSize: MainAxisSize.min, children: [
-    Icon(icon, size: 11, color: kMuted2),
-    const SizedBox(width: 4),
-    Text(label, style: GoogleFonts.robotoMono(color: kMuted2, fontSize: 10.5)),
-  ]);
-}
-
-class _ActionBtn extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool active;
-  final bool loading;
-  final VoidCallback? onTap;
-  final bool expand;
-
-  const _ActionBtn({required this.label, required this.icon, required this.active, this.loading = false, this.onTap, this.expand = true});
-
-  @override
-  Widget build(BuildContext context) {
-    final w = GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          color: active ? kGreenSub.withOpacity(0.5) : kBg,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: active ? kGreen.withOpacity(0.3) : kBorder, width: active ? 1 : 0.5),
-        ),
-        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          if (loading)
-            const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5, color: kAccent))
-          else ...[
-            Icon(icon, size: 13, color: active ? kGreen : kMuted),
-            const SizedBox(width: 5),
-            Text(label, style: GoogleFonts.inter(color: active ? kGreen : kMuted, fontSize: 12, fontWeight: FontWeight.w500)),
-          ],
-        ]),
-      ),
-    );
-    if (!expand) return w;
-    return Expanded(child: w);
-  }
-}
-

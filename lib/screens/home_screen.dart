@@ -17,6 +17,7 @@ import 'fullscreen_composer.dart';
 import 'image_edit_screen.dart';
 import 'notifications_screen.dart';
 import 'openspace_screen.dart';
+import 'templates_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final GitHubService github;
@@ -63,6 +64,17 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _ctrl.addListener(_onCtrlChange);
     _loadRooms();
+    // Keyboard shortcut: Ctrl+Enter / Cmd+Enter to send
+    _focus.onKeyEvent = (node, event) {
+      if (event is KeyDownEvent &&
+          event.logicalKey == LogicalKeyboardKey.enter &&
+          (HardwareKeyboard.instance.isControlPressed || HardwareKeyboard.instance.isMetaPressed) &&
+          _ctrl.text.trim().isNotEmpty) {
+        _send();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    };
   }
 
   @override
@@ -275,6 +287,73 @@ class _HomeScreenState extends State<HomeScreen> {
     if (newName != null && newName.isNotEmpty && mounted) {
       setState(() => _files[i] = AttachedFile(name: newName + ext, bytes: f.bytes, isImage: f.isImage));
     }
+  }
+
+  // ── Preview ────────────────────────────────────────────────────────────────
+  void _showPreview() {
+    final text = _ctrl.text.trim();
+    if (text.isEmpty) { showAppSnack(context, 'Écris quelque chose d\'abord'); return; }
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.6, maxChildSize: 0.92, minChildSize: 0.3,
+        builder: (ctx, scrollCtrl) => Container(
+          decoration: const BoxDecoration(
+            color: kCard,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+            border: Border(top: BorderSide(color: kBorder, width: 0.5)),
+          ),
+          child: Column(children: [
+            const AppDragHandle(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+              child: Row(children: [
+                Text('Prévisualisation', style: GoogleFonts.inter(color: kText, fontSize: 15, fontWeight: FontWeight.w700)),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(color: kCard2, borderRadius: BorderRadius.circular(6)),
+                  child: Text('${text.length} chars', style: GoogleFonts.inter(color: kMuted2, fontSize: 11.5)),
+                ),
+              ]),
+            ),
+            const AppDivider(),
+            Expanded(child: ListView(
+              controller: scrollCtrl,
+              padding: const EdgeInsets.all(20),
+              children: [
+                SelectableText(
+                  text,
+                  style: GoogleFonts.inter(color: kText2, fontSize: 14, height: 1.7),
+                ),
+              ],
+            )),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  // ── Templates ──────────────────────────────────────────────────────────────
+  Future<void> _showTemplates() async {
+    final content = await Navigator.push<String?>(
+      context,
+      MaterialPageRoute(builder: (_) => const TemplatesScreen(pickMode: true)),
+    );
+    if (content == null || !mounted) return;
+    final pos = _ctrl.selection.isValid ? _ctrl.selection.baseOffset : _ctrl.text.length;
+    final before = _ctrl.text.substring(0, pos);
+    final after = _ctrl.text.substring(pos);
+    final separator = before.trim().isEmpty ? '' : '\n\n';
+    final newText = before + separator + content;
+    _ctrl.value = TextEditingValue(
+      text: newText + after,
+      selection: TextSelection.collapsed(offset: newText.length),
+    );
+    setState(() {});
+    _focus.requestFocus();
   }
 
   Future<void> _paste() async {
@@ -641,6 +720,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   _ToolBtn(icon: Icons.add, onTap: _showAttachMenu, tooltip: 'Joindre'),
                   _ToolBtn(icon: Icons.content_paste_rounded, onTap: _paste, tooltip: 'Coller'),
                   _ToolBtn(icon: Icons.open_in_full_rounded, onTap: _openFullscreen, tooltip: 'Plein écran'),
+                  _ToolBtn(icon: Icons.remove_red_eye_outlined, onTap: _showPreview, tooltip: 'Prévisualiser (Ctrl+Entrée pour envoyer)'),
+                  _ToolBtn(icon: Icons.auto_awesome_outlined, onTap: _showTemplates, tooltip: 'Templates'),
                   const Spacer(),
                   GestureDetector(
                     onTap: hasContent ? _send : null,
@@ -1016,6 +1097,25 @@ class _AgentBubble extends StatelessWidget {
               onTap: () async { await Clipboard.setData(ClipboardData(text: p.link)); showAppSnack(context, 'Lien copié !'); },
               child: Text(p.link, style: GoogleFonts.robotoMono(color: kBlue, fontSize: 11), maxLines: 2, overflow: TextOverflow.ellipsis),
             ),
+            const SizedBox(height: 6),
+            Row(children: [
+              GestureDetector(
+                onTap: () async {
+                  final md = '[${p.name}](${p.link})';
+                  await Clipboard.setData(ClipboardData(text: md));
+                  if (context.mounted) showAppSnack(context, 'Lien Markdown copié !');
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(color: kGreenSub, borderRadius: BorderRadius.circular(6), border: Border.all(color: kGreen.withOpacity(0.2), width: 0.5)),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.copy, size: 11, color: kGreen),
+                    const SizedBox(width: 4),
+                    Text('Copier MD', style: GoogleFonts.inter(color: kGreen, fontSize: 11, fontWeight: FontWeight.w600)),
+                  ]),
+                ),
+              ),
+            ]),
           ]),
         ),
       );

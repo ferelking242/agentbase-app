@@ -313,6 +313,47 @@ class GitHubService {
 
   Future<String?> fetchPromptContent(String id) => _raw_('prompts/$id.md');
 
+  /// Fetches the commit history for a specific prompt file.
+  Future<List<Map<String, dynamic>>> fetchPromptHistory(String id) async {
+    if (_pat.isEmpty) return [];
+    try {
+      final r = await _client.get(
+        Uri.parse('$_api/commits?path=prompts/$id.md&per_page=20'),
+        headers: _h,
+      );
+      if (r.statusCode != 200) return [];
+      final commits = jsonDecode(r.body) as List<dynamic>;
+      return commits.map((c) {
+        final map    = c as Map<String, dynamic>;
+        final commit = map['commit'] as Map<String, dynamic>;
+        final author = commit['author'] as Map<String, dynamic>?;
+        final fullSha = map['sha'] as String? ?? '';
+        return {
+          'sha': fullSha.length >= 7 ? fullSha.substring(0, 7) : fullSha,
+          'fullSha': fullSha,
+          'message': (commit['message'] as String? ?? '').split('\n').first,
+          'date': author?['date'] as String? ?? '',
+          'author': author?['name'] as String? ?? 'Unknown',
+        };
+      }).toList();
+    } catch (_) { return []; }
+  }
+
+  /// Fetches the raw content of a prompt file at a specific commit SHA.
+  Future<String?> fetchPromptContentAtCommit(String id, String sha) async {
+    try {
+      final r = await _client.get(
+        Uri.parse('$_api/contents/prompts/$id.md?ref=$sha'),
+        headers: _h,
+      );
+      if (r.statusCode != 200) return null;
+      final data    = jsonDecode(r.body) as Map<String, dynamic>;
+      final encoded = data['content'] as String?;
+      if (encoded == null) return null;
+      return utf8.decode(base64Decode(encoded.replaceAll('\n', '')));
+    } catch (_) { return null; }
+  }
+
   Future<List<SavedPrompt>> fetchRemotePrompts() async {
     if (_pat.isEmpty) return [];
     try {

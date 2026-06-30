@@ -5,12 +5,14 @@ import '../services/prefs_service.dart';
 import '../models/saved_prompt.dart';
 import '../theme.dart';
 import '../widgets/app_components.dart';
+import 'dashboard_screen.dart';
 import 'home_screen.dart';
 import 'notifications_screen.dart';
 import 'openspace_screen.dart';
 import 'rooms_screen.dart';
 import 'prompts_screen.dart';
 import 'settings_screen.dart';
+import 'templates_screen.dart';
 
 class ShellScreen extends StatefulWidget {
   final GitHubService github;
@@ -102,6 +104,20 @@ class _ShellScreenState extends State<ShellScreen> {
     ));
   }
 
+  void _navigateToDashboard() {
+    Navigator.pop(context);
+    Navigator.push(context, MaterialPageRoute(
+      builder: (_) => DashboardScreen(github: widget.github),
+    ));
+  }
+
+  void _navigateToTemplates() {
+    Navigator.pop(context);
+    Navigator.push(context, MaterialPageRoute(
+      builder: (_) => const TemplatesScreen(),
+    ));
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     key: _scaffoldKey,
@@ -114,6 +130,8 @@ class _ShellScreenState extends State<ShellScreen> {
       onOpenSpace: _navigateToOpenSpace,
       onNotifications: _navigateToNotifications,
       onSettings: _navigateToSettings,
+      onDashboard: _navigateToDashboard,
+      onTemplates: _navigateToTemplates,
     ),
     body: HomeScreen(
       github: widget.github,
@@ -135,6 +153,8 @@ class _AppDrawer extends StatelessWidget {
   final VoidCallback onOpenSpace;
   final VoidCallback onNotifications;
   final VoidCallback onSettings;
+  final VoidCallback onDashboard;
+  final VoidCallback onTemplates;
 
   const _AppDrawer({
     required this.github,
@@ -144,6 +164,8 @@ class _AppDrawer extends StatelessWidget {
     required this.onOpenSpace,
     required this.onNotifications,
     required this.onSettings,
+    required this.onDashboard,
+    required this.onTemplates,
   });
 
   @override
@@ -177,38 +199,24 @@ class _AppDrawer extends StatelessWidget {
           const SizedBox(height: 8),
 
           // Nav items
-          _DrawerItem(
-            icon: Icons.workspaces_outlined,
-            label: 'Rooms',
-            onTap: onRooms,
-          ),
+          _DrawerItem(icon: Icons.bar_chart_rounded, label: 'Dashboard', onTap: onDashboard),
+          _DrawerItem(icon: Icons.workspaces_outlined, label: 'Rooms', onTap: onRooms),
           _DrawerItem(
             icon: Icons.article_outlined,
             label: 'Prompts',
             onTap: onPrompts,
             badge: promptCount > 0 ? '$promptCount' : null,
           ),
-          _DrawerItem(
-            icon: Icons.cloud_outlined,
-            label: 'OpenSpace',
-            onTap: onOpenSpace,
-          ),
-          _DrawerItem(
-            icon: Icons.notifications_outlined,
-            label: 'Notifications',
-            onTap: onNotifications,
-          ),
+          _DrawerItem(icon: Icons.cloud_outlined, label: 'OpenSpace', onTap: onOpenSpace),
+          _DrawerItem(icon: Icons.auto_awesome_outlined, label: 'Templates', onTap: onTemplates),
+          _DrawerItem(icon: Icons.notifications_outlined, label: 'Notifications', onTap: onNotifications),
 
           const Spacer(),
 
           const Padding(padding: EdgeInsets.symmetric(horizontal: 16), child: AppDivider()),
           const SizedBox(height: 4),
 
-          _DrawerItem(
-            icon: Icons.settings_outlined,
-            label: 'Paramètres',
-            onTap: onSettings,
-          ),
+          _DrawerItem(icon: Icons.settings_outlined, label: 'Paramètres', onTap: onSettings),
           const SizedBox(height: 8),
         ]),
       ),
