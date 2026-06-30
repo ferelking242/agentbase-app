@@ -16,6 +16,7 @@ import '../services/notification_service.dart';
 import 'fullscreen_composer.dart';
 import 'image_edit_screen.dart';
 import 'notifications_screen.dart';
+import 'openspace_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final GitHubService github;
@@ -308,12 +309,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _send() async {
     if (_ctrl.text.trim().isEmpty && _files.isEmpty) return;
-    final defaultName = _ctrl.text.trim().split(' ').take(5).join(' ');
+    final defaultName = _smartTitle(_ctrl.text.trim());
     final result = await showModalBottomSheet<SendResult>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => SendSheet(defaultName: defaultName, preloadedRooms: _rooms, github: widget.github),
+      builder: (_) => SendSheet(promptText: _ctrl.text.trim(), preloadedRooms: _rooms, github: widget.github),
     );
     if (result == null) return;
 
@@ -413,13 +414,9 @@ class _HomeScreenState extends State<HomeScreen> {
             child: const Icon(Icons.menu_rounded, size: 18, color: kMuted)),
         ),
         const SizedBox(width: 10),
-        Container(
-          width: 26, height: 26,
-          decoration: BoxDecoration(gradient: const LinearGradient(colors: [kAccent, Color(0xFF4F46E5)]), borderRadius: BorderRadius.circular(7)),
-          child: const Icon(Icons.bolt, size: 15, color: Colors.white),
-        ),
-        const SizedBox(width: 8),
-        Text('AgentBase', style: GoogleFonts.inter(color: kText, fontSize: 16, fontWeight: FontWeight.w600, letterSpacing: -0.4)),
+        const _ABLogo(),
+        const SizedBox(width: 9),
+        Text('AgentBase', style: GoogleFonts.inter(color: kText, fontSize: 16, fontWeight: FontWeight.w700, letterSpacing: -0.5)),
         const Spacer(),
         _IconBtn(icon: Icons.sync_rounded, onTap: widget.onSyncRequest, tooltip: 'Sync'),
         const SizedBox(width: 6),
@@ -556,14 +553,14 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(children: [
         Row(children: [
           Expanded(child: Padding(padding: const EdgeInsets.only(right: 6),
-            child: _ActionCard(icon: Icons.photo_library_outlined, label: 'Ajouter image', subtitle: 'Galerie', color: kAccentMid, onTap: _pickFromGallery))),
-          Expanded(child: _ActionCard(icon: Icons.open_in_full_rounded, label: 'Plein écran', subtitle: 'Composer', color: kAccentMid, onTap: _openFullscreen)),
+            child: _ActionCard(icon: Icons.open_in_full_rounded, label: 'Plein écran', subtitle: 'Composer', color: kAccentMid, onTap: _openFullscreen))),
+          Expanded(child: _ActionCard(icon: Icons.workspaces_outlined, label: 'Mes Rooms', subtitle: 'Naviguer', color: kYellow, onTap: widget.onOpenDrawer)),
         ]),
         const SizedBox(height: 6),
         Row(children: [
           Expanded(child: Padding(padding: const EdgeInsets.only(right: 6),
-            child: _ActionCard(icon: Icons.sync_rounded, label: 'Synchroniser', subtitle: 'Prompts', color: kGreen, onTap: widget.onSyncRequest))),
-          Expanded(child: _ActionCard(icon: Icons.workspaces_outlined, label: 'Mes Rooms', subtitle: 'Naviguer', color: kYellow, onTap: widget.onOpenDrawer)),
+            child: _ActionCard(icon: Icons.notifications_outlined, label: 'Notifications', subtitle: 'Activité', color: kGreen, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => NotificationsScreen()))))),
+          Expanded(child: _ActionCard(icon: Icons.photo_library_outlined, label: 'OpenSpace', subtitle: 'Galerie partagée', color: const Color(0xFF8B5CF6), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => OpenspaceScreen(github: widget.github))))),
         ]),
       ]),
     ),
@@ -1066,4 +1063,81 @@ class _TypingDotsState extends State<_TypingDots> with SingleTickerProviderState
       },
     ))),
   );
+}
+
+// ── Smart title generator ─────────────────────────────────────────────────────
+String _smartTitle(String raw) {
+  if (raw.isEmpty) return '';
+  var s = raw
+      .replaceAll(RegExp(r'#{1,6}\s*'), '')
+      .replaceAll(RegExp(r'[*_`~>]'), '')
+      .replaceAll(RegExp(r'\[([^\]]+)\]\([^)]+\)', dotAll: true), r'$1')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+  // Take first sentence (end at . ? ! followed by space or end)
+  final sentMatch = RegExp(r'^(.+?[.?!])(\s|$)').firstMatch(s);
+  if (sentMatch != null && sentMatch.group(1)!.length >= 8) {
+    s = sentMatch.group(1)!.trim();
+  }
+  // Fallback: first line
+  final firstLine = s.split('\n').first.trim();
+  if (firstLine.isNotEmpty) s = firstLine;
+  // Truncate at word boundary
+  if (s.length > 60) {
+    s = s.substring(0, 57);
+    final last = s.lastIndexOf(' ');
+    if (last > 15) s = s.substring(0, last);
+    s = '$s…';
+  }
+  return s.isNotEmpty ? s : raw.split(' ').take(5).join(' ');
+}
+
+// ── Professional AB Logo ──────────────────────────────────────────────────────
+class _ABLogo extends StatelessWidget {
+  const _ABLogo();
+
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+    size: const Size(28, 28),
+    painter: _ABLogoPainter(),
+  );
+}
+
+class _ABLogoPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width, h = size.height;
+    final r = w * 0.22;
+
+    // Background rect
+    final bgPaint = Paint()
+      ..shader = const LinearGradient(
+        colors: [Color(0xFF4F46E5), Color(0xFF7C3AED)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ).createShader(Rect.fromLTWH(0, 0, w, h));
+    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(0, 0, w, h), Radius.circular(r)), bgPaint);
+
+    // Draw ">" symbol — terminal / agent feel
+    final stroke = Paint()
+      ..color = Colors.white.withOpacity(0.95)
+      ..strokeWidth = w * 0.12
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+
+    final cx = w * 0.42, cy = h * 0.5, hw = w * 0.18, hh = h * 0.22;
+    final path = Path()
+      ..moveTo(cx - hw, cy - hh)
+      ..lineTo(cx + hw, cy)
+      ..lineTo(cx - hw, cy + hh);
+    canvas.drawPath(path, stroke);
+
+    // Small dot after ">"
+    final dot = Paint()..color = Colors.white.withOpacity(0.75)..style = PaintingStyle.fill;
+    canvas.drawCircle(Offset(cx + hw * 1.9, cy), w * 0.065, dot);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
