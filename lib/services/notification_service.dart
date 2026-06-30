@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AppNotification {
@@ -23,11 +22,8 @@ class AppNotification {
   );
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'title': title,
-    'body': body,
-    'createdAt': createdAt.toIso8601String(),
-    'read': read,
+    'id': id, 'title': title, 'body': body,
+    'createdAt': createdAt.toIso8601String(), 'read': read,
   };
 
   factory AppNotification.fromJson(Map<String, dynamic> j) => AppNotification(
@@ -41,52 +37,7 @@ class AppNotification {
 
 class NotificationService {
   static const _prefsKey  = 'agentbase_notifications';
-  static const _topicKey  = 'agentbase_ntfy_topic';
-  static const _ntfyBase  = 'https://ntfy.sh';
-  static const _maxStored = 50;
-
-  // ── Topic ─────────────────────────────────────────────────────────────────
-
-  static Future<String?> getTopic() async {
-    final p = await SharedPreferences.getInstance();
-    return p.getString(_topicKey);
-  }
-
-  static Future<void> saveTopic(String topic) async {
-    final p = await SharedPreferences.getInstance();
-    await p.setString(_topicKey, topic);
-  }
-
-  // ── Push via ntfy.sh ──────────────────────────────────────────────────────
-
-  static Future<bool> sendPush({
-    required String title,
-    required String body,
-    String? topic,
-    String? link,
-  }) async {
-    final t = topic ?? await getTopic();
-    if (t == null || t.isEmpty) return false;
-    try {
-      final headers = <String, String>{
-        'Title': title,
-        'Priority': 'default',
-        'Content-Type': 'text/plain; charset=utf-8',
-        if (link != null) 'Click': link,
-        'Tags': 'robot,agentbase',
-      };
-      final r = await http.post(
-        Uri.parse('$_ntfyBase/$t'),
-        headers: headers,
-        body: body,
-      ).timeout(const Duration(seconds: 6));
-      return r.statusCode == 200;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  // ── Local store ───────────────────────────────────────────────────────────
+  static const _maxStored = 80;
 
   static Future<List<AppNotification>> getAll() async {
     final p = await SharedPreferences.getInstance();
@@ -137,7 +88,8 @@ class NotificationService {
     final p = await SharedPreferences.getInstance();
     final raw = p.getStringList(_prefsKey) ?? [];
     final updated = raw.where((s) {
-      try { return (jsonDecode(s) as Map<String, dynamic>)['id'] != id; } catch (_) { return true; }
+      try { return (jsonDecode(s) as Map<String, dynamic>)['id'] != id; }
+      catch (_) { return true; }
     }).toList();
     await p.setStringList(_prefsKey, updated);
   }
@@ -152,47 +104,39 @@ class NotificationService {
     return all.where((n) => !n.read).length;
   }
 
-  // ── Shortcut: prompt saved ────────────────────────────────────────────────
-
   static Future<void> notifyPromptSaved({
     required String promptName,
     required String link,
-    String? topic,
   }) async {
-    final id = DateTime.now().millisecondsSinceEpoch.toString();
-    final n = AppNotification(
-      id: id,
-      title: 'Prompt sauvegardé',
+    await add(AppNotification(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      title: 'Prompt sauvegardé ✅',
       body: promptName,
       createdAt: DateTime.now(),
-    );
-    await add(n);
-    await sendPush(
-      title: '✅ Prompt sauvegardé — AgentBase',
-      body: promptName,
-      topic: topic,
-      link: link,
-    );
+    ));
   }
 
   static Future<void> notifyAgentDone({
     required String message,
     String? link,
-    String? topic,
   }) async {
-    final id = DateTime.now().millisecondsSinceEpoch.toString();
-    final n = AppNotification(
-      id: id,
-      title: 'Agent terminé',
+    await add(AppNotification(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      title: 'Agent terminé 🤖',
       body: message,
       createdAt: DateTime.now(),
-    );
-    await add(n);
-    await sendPush(
-      title: '🤖 Agent terminé — AgentBase',
-      body: message,
-      topic: topic,
-      link: link,
-    );
+    ));
+  }
+
+  static Future<void> notifyInfo({
+    required String title,
+    required String body,
+  }) async {
+    await add(AppNotification(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      title: title,
+      body: body,
+      createdAt: DateTime.now(),
+    ));
   }
 }
