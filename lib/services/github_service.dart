@@ -14,6 +14,65 @@ class AttachedFile {
   AttachedFile({required this.name, required this.bytes, required this.isImage});
 }
 
+class TranscriptEntry {
+  final String id, agentName, userRequest, actionsDone;
+  final DateTime createdAt;
+  TranscriptEntry({
+    required this.id,
+    required this.agentName,
+    required this.userRequest,
+    required this.actionsDone,
+    DateTime? createdAt,
+  }) : createdAt = createdAt ?? DateTime.now();
+
+  static TranscriptEntry fromMarkdown(String content, String filename) {
+    String agentName = 'Agent', userRequest = '', actionsDone = '', id = '';
+    DateTime? createdAt;
+    final lines = content.split('\n');
+    for (int i = 0; i < lines.length; i++) {
+      final l = lines[i];
+      if (l.startsWith('**Agent:**')) agentName = l.replaceFirst('**Agent:**', '').trim();
+      else if (l.startsWith('**Created:**')) {
+        try { createdAt = DateTime.parse(l.replaceFirst('**Created:**', '').trim()); } catch (_) {}
+      } else if (l.startsWith('**ID:**')) id = l.replaceFirst('**ID:**', '').trim();
+      else if (l.trim() == '### Demande utilisateur') {
+        final buf = StringBuffer(); i++;
+        while (i < lines.length && !lines[i].startsWith('###')) { buf.writeln(lines[i]); i++; }
+        userRequest = buf.toString().trim(); i--;
+      } else if (l.trim() == '### Actions effectuées') {
+        final buf = StringBuffer(); i++;
+        while (i < lines.length && !lines[i].startsWith('###')) { buf.writeln(lines[i]); i++; }
+        actionsDone = buf.toString().trim(); i--;
+      }
+    }
+    final tsM = RegExp(r'\d{13}').firstMatch(filename);
+    if (id.isEmpty) id = tsM?.group(0) ?? filename;
+    if (createdAt == null && tsM != null) {
+      createdAt = DateTime.fromMillisecondsSinceEpoch(int.parse(tsM.group(0)!));
+    }
+    return TranscriptEntry(id: id, agentName: agentName, userRequest: userRequest,
+        actionsDone: actionsDone, createdAt: createdAt);
+  }
+
+  String toMarkdown() {
+    final buf = StringBuffer();
+    buf.writeln('## Transcription — $agentName');
+    buf.writeln();
+    buf.writeln('**ID:** $id');
+    buf.writeln('**Agent:** $agentName');
+    buf.writeln('**Created:** ${createdAt.toIso8601String()}');
+    buf.writeln();
+    buf.writeln('### Demande utilisateur');
+    buf.writeln();
+    buf.writeln(userRequest.isNotEmpty ? userRequest : '_(non renseigné)_');
+    buf.writeln();
+    buf.writeln('### Actions effectuées');
+    buf.writeln();
+    buf.writeln(actionsDone.isNotEmpty ? actionsDone : '_(non renseigné)_');
+    return buf.toString();
+  }
+}
+
 class GitHubService {
   final String owner, repo;
   String _pat = '';
@@ -74,10 +133,12 @@ class GitHubService {
     return null;
   }
 
-  Future<Room> createRoom(String name, {String description = '', String color = '#6366f1'}) async {
+  Future<Room> createRoom(String name, {String description = '', String color = '#6366f1',
+      String? githubUrl, String? stack, List<String> linkedRepos = const []}) async {
     if (_pat.isEmpty) throw Exception('Token GitHub manquant');
     final id = 'room_${DateTime.now().millisecondsSinceEpoch}';
-    final newRoom = Room(id: id, name: name, description: description, color: color);
+    final newRoom = Room(id: id, name: name, description: description, color: color,
+        githubUrl: githubUrl, stack: stack, linkedRepos: linkedRepos);
     final meta = await _roomsFileMeta();
     List<dynamic> rooms = [];
     String? sha;
@@ -160,10 +221,10 @@ class GitHubService {
     return results;
   }
 
-  Future<void> pushMessage(String roomId, String text) async {
+  Future<void> pushMessage(String roomId, String text, {String sender = 'Agent'}) async {
     if (_pat.isEmpty) throw Exception('No PAT');
     final ts = DateTime.now().millisecondsSinceEpoch;
-    final md = ['## Message utilisateur', '**Sender:** Moi',
+    final md = ['## Message', '**Sender:** $sender',
       '**Created:** ${DateTime.now().toIso8601String()}', '', text].join('\n');
     final r = await _client.put(
       Uri.parse('$_api/contents/rooms/$roomId/chat-$ts.md'),
@@ -171,6 +232,34 @@ class GitHubService {
       body: jsonEncode({'message': 'Chat — $roomId', 'content': base64Encode(utf8.encode(md))}));
     if (r.statusCode != 201) throw Exception('Push msg failed: ${r.statusCode}');
   }
+
+  // ── Transcriptions ────────────────────────────────────────────────────────
+
+  Future<List<TranscriptEntry>> fetchTranscripts(String roomId) async {
+    final files = await listFiles(roomId);
+    final results = <TranscriptEntry>[];
+    await Future.wait(files.where((fn) => fn.startsWith('transcript-')).map((fn) async {
+      final c = await _raw_('rooms/$roomId/$fn');
+      if (c == null) return;
+      results.add(TranscriptEntry.fromMarkdown(c, fn));
+    }));
+    results.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return results;
+  }
+
+  Future<void> pushTranscript(String roomId, TranscriptEntry entry) async {
+    if (_pat.isEmpty) throw Exception('No PAT');
+    final r = await _client.put(
+      Uri.parse('$_api/contents/rooms/$roomId/transcript-${entry.id}.md'),
+      headers: _h,
+      body: jsonEncode({
+        'message': 'Transcription — ${entry.agentName}',
+        'content': base64Encode(utf8.encode(entry.toMarkdown())),
+      }));
+    if (r.statusCode != 201 && r.statusCode != 200) throw Exception('Push transcript failed: ${r.statusCode}');
+  }
+
+  // ── Prompts ───────────────────────────────────────────────────────────────
 
   Future<List<AgentPrompt>> fetchPrompts(String roomId) async {
     final files = await listFiles(roomId);
@@ -199,7 +288,25 @@ class GitHubService {
         'message': 'Prompt ${prompt.name.isNotEmpty ? prompt.name : "#${prompt.number}"} — $roomId',
         'content': base64Encode(utf8.encode(prompt.toMarkdown())),
       }));
-    if (r.statusCode != 201) throw Exception('Push prompt failed: ${r.statusCode}');
+    if (r.statusCode != 201 && r.statusCode != 200) throw Exception('Push prompt failed: ${r.statusCode}');
+  }
+
+  Future<void> updatePromptStatus(String roomId, AgentPrompt prompt, String newStatus) async {
+    if (_pat.isEmpty) throw Exception('No PAT');
+    final updated = AgentPrompt(
+      id: prompt.id, number: prompt.number, roomId: prompt.roomId,
+      text: prompt.text, status: newStatus, name: prompt.name,
+      createdAt: prompt.createdAt, attachments: prompt.attachments,
+    );
+    final path = 'rooms/$roomId/prompt-${prompt.id}.md';
+    final sha = await _fileSha(path);
+    final body = <String, dynamic>{
+      'message': 'Status → $newStatus — ${prompt.name}',
+      'content': base64Encode(utf8.encode(updated.toMarkdown())),
+    };
+    if (sha != null) body['sha'] = sha;
+    final r = await _client.put(Uri.parse('$_api/contents/$path'), headers: _h, body: jsonEncode(body));
+    if (r.statusCode != 200 && r.statusCode != 201) throw Exception('Update status failed: ${r.statusCode}');
   }
 
   // ── Direct prompts ────────────────────────────────────────────────────────
@@ -209,8 +316,7 @@ class GitHubService {
   Future<List<SavedPrompt>> fetchRemotePrompts() async {
     if (_pat.isEmpty) return [];
     try {
-      final r = await _client.get(
-        Uri.parse('$_api/contents/prompts'), headers: _h);
+      final r = await _client.get(Uri.parse('$_api/contents/prompts'), headers: _h);
       if (r.statusCode != 200) return [];
       final files = (jsonDecode(r.body) as List<dynamic>)
           .where((f) => (f['name'] as String).endsWith('.md'))
@@ -235,8 +341,7 @@ class GitHubService {
             for (int i = idx + 1; i < lines.length && i < idx + 5; i++) {
               final l = lines[i].trim();
               if (l.isNotEmpty && !l.startsWith('#') && !l.startsWith('**') && l != '_(aucun texte)_') {
-                promptName = l.split(' ').take(7).join(' ');
-                if (promptName.length > 55) promptName = '${promptName.substring(0, 52)}...';
+                promptName = _smartTitle(l);
                 break;
               }
             }
@@ -255,6 +360,23 @@ class GitHubService {
     } catch (_) { return []; }
   }
 
+  static String _smartTitle(String raw) {
+    var s = raw.replaceAll(RegExp(r'#{1,6}\s*'), '')
+               .replaceAll(RegExp(r'[*_`~>]'), '')
+               .replaceAll(RegExp(r'\[([^\]]+)\]\([^)]+\)'), r'$1')
+               .replaceAll(RegExp(r'\s+'), ' ')
+               .trim();
+    final sentences = s.split(RegExp(r'(?<=[.?!])\s+'));
+    s = sentences.firstWhere((x) => x.trim().length > 6, orElse: () => s).trim();
+    if (s.length > 60) {
+      s = s.substring(0, 57);
+      final last = s.lastIndexOf(' ');
+      if (last > 15) s = s.substring(0, last);
+      s = '$s…';
+    }
+    return s;
+  }
+
   // ── Upload asset helper ───────────────────────────────────────────────────
 
   Future<String> _uploadAsset(String path, Uint8List bytes, {String? message}) async {
@@ -271,18 +393,11 @@ class GitHubService {
     return '$_raw/$path';
   }
 
-  // ── Push direct prompt with @mention inline images ────────────────────────
-
   Future<String> pushDirectPrompt(
-    String id,
-    String text,
-    List<AttachedFile> files, {
-    Room? room,
-    String? roomContext,
+    String id, String text, List<AttachedFile> files, {
+    Room? room, String? roomContext,
   }) async {
     if (_pat.isEmpty) throw Exception('PAT non configuré — va dans Paramètres');
-
-    // 1. Upload each attachment & build name→url map
     final urlMap = <String, String>{};
     for (final f in files) {
       final safeName = f.name.replaceAll(' ', '_');
@@ -291,11 +406,8 @@ class GitHubService {
         urlMap[f.name] = url;
       } catch (_) {}
     }
-
-    // 2. Parse @mentions and build inline MD
     final mentionPattern = RegExp(r'@(\w+)');
     final usedFiles = <String>{};
-
     String resolveUrl(String mention) {
       final needle = mention.toLowerCase();
       for (final entry in urlMap.entries) {
@@ -305,7 +417,6 @@ class GitHubService {
       }
       return '';
     }
-
     String resolveFileName(String mention) {
       final needle = mention.toLowerCase();
       for (final key in urlMap.keys) {
@@ -315,7 +426,6 @@ class GitHubService {
       }
       return mention;
     }
-
     final contentBuf = StringBuffer();
     int lastEnd = 0;
     for (final match in mentionPattern.allMatches(text)) {
@@ -338,10 +448,7 @@ class GitHubService {
     }
     if (lastEnd < text.length) contentBuf.write(text.substring(lastEnd));
     final inlineContent = contentBuf.toString().trim();
-
     final nonMentioned = urlMap.entries.where((e) => !usedFiles.contains(e.key)).toList();
-
-    // 3. Build MD with hidden metadata comment + visible content
     final now = DateTime.now();
     final sb = StringBuffer();
     sb.writeln('<!-- AGENTBASE_META');
@@ -354,34 +461,21 @@ class GitHubService {
     sb.writeln();
     sb.writeln(inlineContent.isNotEmpty ? inlineContent : '_(aucun texte)_');
     if (nonMentioned.isNotEmpty) {
-      sb.writeln();
-      sb.writeln('## Pièces jointes');
-      sb.writeln();
+      sb.writeln(); sb.writeln('## Pièces jointes'); sb.writeln();
       for (final e in nonMentioned) {
-        final isImg = ['png','jpg','jpeg','gif','webp']
-            .contains(e.key.split('.').last.toLowerCase());
+        final isImg = ['png','jpg','jpeg','gif','webp'].contains(e.key.split('.').last.toLowerCase());
         sb.writeln(isImg ? '![${e.key}](${e.value})' : '[${e.key}](${e.value})');
       }
     }
     if (roomContext != null && roomContext.trim().isNotEmpty) {
-      sb.writeln();
-      sb.writeln('---');
-      sb.writeln();
-      sb.writeln('## Contexte — ${room?.name ?? "Global"}');
-      sb.writeln();
+      sb.writeln(); sb.writeln('---'); sb.writeln();
+      sb.writeln('## Contexte — ${room?.name ?? "Global"}'); sb.writeln();
       sb.writeln(roomContext.trim());
     }
-
-    // 4. Push MD file
     final promptPath = 'prompts/$id.md';
-    final body = jsonEncode({
-      'message': 'Prompt $id',
-      'content': base64Encode(utf8.encode(sb.toString())),
-    });
+    final body = jsonEncode({'message': 'Prompt $id', 'content': base64Encode(utf8.encode(sb.toString()))});
     final r = await _client.put(Uri.parse('$_api/contents/$promptPath'), headers: _h, body: body);
-    if (r.statusCode != 201 && r.statusCode != 200) {
-      throw Exception('Sauvegarde échouée: ${r.statusCode}');
-    }
+    if (r.statusCode != 201 && r.statusCode != 200) throw Exception('Sauvegarde échouée: ${r.statusCode}');
     return '$_raw/$promptPath';
   }
 
@@ -389,89 +483,52 @@ class GitHubService {
 
   Future<List<dynamic>> fetchOpenspaceImages() async {
     try {
-      final r = await _client.get(
-        Uri.parse('$_api/contents/openspace'),
-        headers: _pat.isNotEmpty ? _h : {},
-      );
+      final r = await _client.get(Uri.parse('$_api/contents/openspace'),
+          headers: _pat.isNotEmpty ? _h : {});
       if (r.statusCode == 404) return [];
       if (r.statusCode != 200) throw Exception('Erreur ${r.statusCode}');
-      final files = (jsonDecode(r.body) as List<dynamic>)
-          .where((f) {
-            final name = (f['name'] as String).toLowerCase();
-            return name.endsWith('.png') || name.endsWith('.jpg') ||
-                   name.endsWith('.jpeg') || name.endsWith('.gif') || name.endsWith('.webp');
-          })
-          .toList();
+      final files = (jsonDecode(r.body) as List<dynamic>).where((f) {
+        final name = (f['name'] as String).toLowerCase();
+        return name.endsWith('.png') || name.endsWith('.jpg') ||
+               name.endsWith('.jpeg') || name.endsWith('.gif') || name.endsWith('.webp');
+      }).toList();
       return files.map((f) {
         final name = f['name'] as String;
         final slug = name.replaceAll(' ', '_').replaceAll(RegExp(r'\.[^.]+$'), '');
-        return {
-          'name': name,
-          'mention': '@$slug',
-          'rawUrl': '$_raw/openspace/$name',
-          'sha': f['sha'] as String? ?? '',
-        };
+        return {'name': name, 'mention': '@$slug', 'rawUrl': '$_raw/openspace/$name', 'sha': f['sha'] as String? ?? ''};
       }).toList();
-    } catch (e) {
-      throw Exception('Chargement OpenSpace : $e');
-    }
+    } catch (e) { throw Exception('Chargement OpenSpace : $e'); }
   }
 
   Future<Map<String, dynamic>> uploadOpenspaceImage(
-    String originalName,
-    Uint8List bytes,
-    List<dynamic> existingImages,
-  ) async {
+      String originalName, Uint8List bytes, List<dynamic> existingImages) async {
     if (_pat.isEmpty) throw Exception('Token GitHub manquant');
-
     final ext = originalName.contains('.')
-        ? originalName.substring(originalName.lastIndexOf('.')).toLowerCase()
-        : '.jpg';
+        ? originalName.substring(originalName.lastIndexOf('.')).toLowerCase() : '.jpg';
     final baseName = originalName.contains('.')
-        ? originalName.substring(0, originalName.lastIndexOf('.'))
-        : originalName;
+        ? originalName.substring(0, originalName.lastIndexOf('.')) : originalName;
     final safeBase = baseName.replaceAll(RegExp(r'[^a-zA-Z0-9_\-]'), '_');
-
-    final existingNames = existingImages
-        .map((f) => (f is Map ? f['name'] : '') as String)
-        .toSet();
-
+    final existingNames = existingImages.map((f) => (f is Map ? f['name'] : '') as String).toSet();
     String finalName = '$safeBase$ext';
     if (existingNames.contains(finalName)) {
       int counter = 1;
-      while (existingNames.contains('${safeBase}_$counter$ext')) {
-        counter++;
-      }
+      while (existingNames.contains('${safeBase}_$counter$ext')) counter++;
       finalName = '${safeBase}_$counter$ext';
     }
-
     final path = 'openspace/$finalName';
-    final body = jsonEncode({
-      'message': 'OpenSpace: add $finalName',
-      'content': base64Encode(bytes),
-    });
+    final body = jsonEncode({'message': 'OpenSpace: add $finalName', 'content': base64Encode(bytes)});
     final r = await _client.put(Uri.parse('$_api/contents/$path'), headers: _h, body: body);
-    if (r.statusCode != 201 && r.statusCode != 200) {
-      throw Exception('Upload échoué : ${r.statusCode}');
-    }
+    if (r.statusCode != 201 && r.statusCode != 200) throw Exception('Upload échoué : ${r.statusCode}');
     final resp = jsonDecode(r.body) as Map<String, dynamic>;
     final sha = (resp['content'] as Map<String, dynamic>)['sha'] as String? ?? '';
     final slug = finalName.replaceAll(RegExp(r'\.[^.]+$'), '');
-    return {
-      'name': finalName,
-      'mention': '@$slug',
-      'rawUrl': '$_raw/$path',
-      'sha': sha,
-    };
+    return {'name': finalName, 'mention': '@$slug', 'rawUrl': '$_raw/$path', 'sha': sha};
   }
 
   Future<void> deleteOpenspaceImage(String name, String sha) async {
     if (_pat.isEmpty) throw Exception('Token GitHub manquant');
-    final r = await _client.delete(
-      Uri.parse('$_api/contents/openspace/$name'),
-      headers: _h,
-      body: jsonEncode({'message': 'OpenSpace: remove $name', 'sha': sha}),
-    );
+    final r = await _client.delete(Uri.parse('$_api/contents/openspace/$name'),
+        headers: _h, body: jsonEncode({'message': 'OpenSpace: remove $name', 'sha': sha}));
     if (r.statusCode != 200) throw Exception('Suppression échouée : ${r.statusCode}');
   }
 }
