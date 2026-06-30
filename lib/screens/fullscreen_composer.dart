@@ -220,7 +220,7 @@ class _FullscreenComposerScreenState extends State<FullscreenComposerScreen> {
     final defaultName = _ctrl.text.trim().split(' ').take(5).join(' ');
     final result = await showModalBottomSheet<SendResult>(
       context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
-      builder: (_) => SendSheet(defaultName: defaultName, preloadedRooms: _rooms, github: widget.github),
+      builder: (_) => SendSheet(promptText: _ctrl.text.trim(), preloadedRooms: _rooms, github: widget.github),
     );
     if (result == null) return;
 
