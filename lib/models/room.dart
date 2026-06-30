@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 class Room {
   final String id, name, description, color;
   final int transcriptCount, chatCount;
+  final String? githubUrl;
+  final String? stack;
+  final List<String> linkedRepos;
 
   const Room({
     required this.id,
@@ -11,9 +14,11 @@ class Room {
     required this.color,
     this.transcriptCount = 0,
     this.chatCount = 0,
+    this.githubUrl,
+    this.stack,
+    this.linkedRepos = const [],
   });
 
-  /// Combined prompt count shown in the UI
   int get promptCount => transcriptCount + chatCount;
 
   factory Room.fromJson(Map<String, dynamic> j) => Room(
@@ -23,6 +28,10 @@ class Room {
     color:           j['color']            as String? ?? '#6366f1',
     transcriptCount: j['transcript_count'] as int? ?? 0,
     chatCount:       j['chat_count']       as int? ?? 0,
+    githubUrl:       j['github_url']       as String?,
+    stack:           j['stack']            as String?,
+    linkedRepos:     (j['linked_repos'] as List<dynamic>?)
+                         ?.map((e) => e as String).toList() ?? [],
   );
 
   Map<String, dynamic> toJson() => {
@@ -32,6 +41,9 @@ class Room {
     'color': color,
     'transcript_count': transcriptCount,
     'chat_count': chatCount,
+    if (githubUrl != null) 'github_url': githubUrl,
+    if (stack != null) 'stack': stack,
+    if (linkedRepos.isNotEmpty) 'linked_repos': linkedRepos,
   };
 
   Color get accentColor {
@@ -43,9 +55,6 @@ class Room {
     switch (id.toLowerCase()) {
       case 'watchtower': return Icons.radar_outlined;
       case 'scorais':    return Icons.bar_chart_outlined;
-      case 'room-3':     return Icons.memory_outlined;
-      case 'room-4':     return Icons.code_outlined;
-      case 'room-5':     return Icons.auto_awesome_outlined;
       default:
         final l = name.toLowerCase();
         if (l.contains('code') || l.contains('dev'))      return Icons.code_outlined;
@@ -53,6 +62,7 @@ class Room {
         if (l.contains('data')  || l.contains('score'))   return Icons.bar_chart_outlined;
         if (l.contains('watch') || l.contains('monitor')) return Icons.radar_outlined;
         if (l.contains('server') || l.contains('back'))   return Icons.dns_outlined;
+        if (l.contains('site') || l.contains('web'))      return Icons.language_outlined;
         return Icons.layers_outlined;
     }
   }
