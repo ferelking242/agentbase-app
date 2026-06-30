@@ -18,12 +18,10 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final _tokenCtrl = TextEditingController();
-  final _ntfyCtrl  = TextEditingController();
   bool _showToken = false;
   bool _saving = false;
   bool _testing = false;
   bool _testPassed = false;
-  bool _testingNtfy = false;
   String? _testError;
 
   @override
@@ -32,15 +30,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     PrefsService.getPat().then((p) {
       if (mounted && p != null) setState(() => _tokenCtrl.text = p);
     });
-    NotificationService.getTopic().then((t) {
-      if (mounted && t != null) setState(() => _ntfyCtrl.text = t);
-    });
   }
 
   @override
   void dispose() {
     _tokenCtrl.dispose();
-    _ntfyCtrl.dispose();
     super.dispose();
   }
 
@@ -73,23 +67,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _testNtfy() async {
-    final topic = _ntfyCtrl.text.trim();
-    if (topic.isEmpty) {
-      showAppSnack(context, 'Entre un topic ntfy d\'abord', isError: true);
-      return;
-    }
-    setState(() => _testingNtfy = true);
-    final ok = await NotificationService.sendPush(
-      title: '✅ AgentBase — Test OK',
-      body: 'Les notifications push fonctionnent !',
-      topic: topic,
-    );
-    if (!mounted) return;
-    setState(() => _testingNtfy = false);
-    showAppSnack(context, ok ? 'Notification envoyée !' : 'Erreur — vérifie le topic', isError: !ok);
-  }
-
   Future<void> _save() async {
     if (!_isConfigured) {
       showAppSnack(context, 'Token requis', isError: true);
@@ -99,8 +76,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final pat = _tokenCtrl.text.trim();
     await PrefsService.savePat(pat);
     widget.github.setPat(pat);
-    final ntfyTopic = _ntfyCtrl.text.trim();
-    if (ntfyTopic.isNotEmpty) await NotificationService.saveTopic(ntfyTopic);
     setState(() => _saving = false);
     if (mounted) showAppSnack(context, 'Token sauvegardé');
   }
