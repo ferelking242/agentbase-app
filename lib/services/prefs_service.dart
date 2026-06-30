@@ -30,16 +30,18 @@ class PromptTemplate {
 }
 
 class PrefsService {
-  static const _kPat         = 'gh_pat';
-  static const _kPrompts     = 'saved_prompts';
-  static const _kNextNumber  = 'prompt_next_number';
-  static const _kTemplates   = 'prompt_templates';
-  static const _kFavorites   = 'prompt_favorites';
-  static const _kContentCache= 'prompt_content_cache';
-  static const _kThemeMode   = 'theme_mode';          // 'dark' | 'light' | 'system'
-  static const _kOwner       = 'gh_owner';
-  static const _kRepo        = 'gh_repo';
-  static const _kAutoSync    = 'auto_sync_enabled';
+  static const _kPat           = 'gh_pat';
+  static const _kPrompts       = 'saved_prompts';
+  static const _kNextNumber    = 'prompt_next_number';
+  static const _kTemplates     = 'prompt_templates';
+  static const _kFavorites     = 'prompt_favorites';
+  static const _kContentCache  = 'prompt_content_cache';
+  static const _kThemeMode     = 'theme_mode';
+  static const _kOwner         = 'gh_owner';
+  static const _kRepo          = 'gh_repo';
+  static const _kAutoSync      = 'auto_sync_enabled';
+  static const _kPinnedRooms   = 'pinned_rooms';
+  static const _kOnboarding    = 'onboarding_seen';
 
   // ── PAT ──────────────────────────────────────────────────────────────────
   static Future<String?> getPat() async {
@@ -266,6 +268,50 @@ class PrefsService {
       createdAt: old.createdAt,
     );
     await saveTemplates(templates);
+  }
+
+  // ── Onboarding ────────────────────────────────────────────────────────────
+  static Future<bool> isOnboardingSeen() async {
+    final p = await SharedPreferences.getInstance();
+    return p.getBool(_kOnboarding) ?? false;
+  }
+  static Future<void> setOnboardingSeen(bool v) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setBool(_kOnboarding, v);
+  }
+
+  // ── Pinned rooms ──────────────────────────────────────────────────────────
+  static Future<Set<String>> getPinnedRooms() async {
+    final p = await SharedPreferences.getInstance();
+    final raw = p.getString(_kPinnedRooms);
+    if (raw == null) return {};
+    try { return Set<String>.from(jsonDecode(raw) as List); } catch (_) { return {}; }
+  }
+  static Future<bool> togglePinRoom(String id) async {
+    final p = await SharedPreferences.getInstance();
+    final pins = await getPinnedRooms();
+    final isNowPinned = !pins.contains(id);
+    if (isNowPinned) pins.add(id); else pins.remove(id);
+    await p.setString(_kPinnedRooms, jsonEncode(pins.toList()));
+    return isNowPinned;
+  }
+
+  // ── Archive prompt ────────────────────────────────────────────────────────
+  static Future<void> archivePrompt(String id) async {
+    final p = await SharedPreferences.getInstance();
+    final prompts = await getPrompts();
+    final idx = prompts.indexWhere((pr) => pr.id == id);
+    if (idx == -1) return;
+    prompts[idx] = prompts[idx].copyWith(isArchived: true);
+    await p.setString(_kPrompts, SavedPrompt.listToJson(prompts));
+  }
+  static Future<void> unarchivePrompt(String id) async {
+    final p = await SharedPreferences.getInstance();
+    final prompts = await getPrompts();
+    final idx = prompts.indexWhere((pr) => pr.id == id);
+    if (idx == -1) return;
+    prompts[idx] = prompts[idx].copyWith(isArchived: false);
+    await p.setString(_kPrompts, SavedPrompt.listToJson(prompts));
   }
 
   static List<PromptTemplate> _defaultTemplates() => [

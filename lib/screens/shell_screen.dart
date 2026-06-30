@@ -11,6 +11,7 @@ import 'notifications_screen.dart';
 import 'openspace_screen.dart';
 import 'rooms_screen.dart';
 import 'prompts_screen.dart';
+import 'search_screen.dart';
 import 'settings_screen.dart';
 import 'templates_screen.dart';
 
@@ -118,6 +119,13 @@ class _ShellScreenState extends State<ShellScreen> {
     ));
   }
 
+  void _navigateToSearch() {
+    Navigator.pop(context);
+    Navigator.push(context, MaterialPageRoute(
+      builder: (_) => SearchScreen(github: widget.github),
+    ));
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     key: _scaffoldKey,
@@ -132,6 +140,7 @@ class _ShellScreenState extends State<ShellScreen> {
       onSettings: _navigateToSettings,
       onDashboard: _navigateToDashboard,
       onTemplates: _navigateToTemplates,
+      onSearch: _navigateToSearch,
     ),
     body: HomeScreen(
       github: widget.github,
@@ -155,6 +164,7 @@ class _AppDrawer extends StatelessWidget {
   final VoidCallback onSettings;
   final VoidCallback onDashboard;
   final VoidCallback onTemplates;
+  final VoidCallback onSearch;
 
   const _AppDrawer({
     required this.github,
@@ -166,6 +176,7 @@ class _AppDrawer extends StatelessWidget {
     required this.onSettings,
     required this.onDashboard,
     required this.onTemplates,
+    required this.onSearch,
   });
 
   @override
@@ -199,6 +210,7 @@ class _AppDrawer extends StatelessWidget {
           const SizedBox(height: 8),
 
           // Nav items
+          _DrawerItem(icon: Icons.search, label: 'Rechercher', onTap: onSearch),
           _DrawerItem(icon: Icons.bar_chart_rounded, label: 'Dashboard', onTap: onDashboard),
           _DrawerItem(icon: Icons.workspaces_outlined, label: 'Rooms', onTap: onRooms),
           _DrawerItem(

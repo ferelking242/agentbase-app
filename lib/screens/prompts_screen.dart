@@ -29,6 +29,7 @@ class _PromptsScreenState extends State<PromptsScreen> {
   bool _loading = true;
   List<SavedPrompt> _local = [];
   bool _showFavoritesOnly = false;
+  bool _showArchived = false;
   String? _tagFilter;
 
   @override
@@ -58,6 +59,7 @@ class _PromptsScreenState extends State<PromptsScreen> {
     final q = _searchCtrl.text.trim().toLowerCase();
     final now = DateTime.now();
     var list = _local.where((p) {
+      if (p.isArchived) return false;  // archived prompts hidden from main list
       if (_showFavoritesOnly && !p.isFavorite) return false;
       if (_tagFilter != null && !p.tags.contains(_tagFilter)) return false;
       if (q.isNotEmpty && !p.name.toLowerCase().contains(q) && !p.id.contains(q)) return false;
@@ -77,6 +79,8 @@ class _PromptsScreenState extends State<PromptsScreen> {
         : a.created.compareTo(b.created));
     return list;
   }
+
+  List<SavedPrompt> get _archived => _local.where((p) => p.isArchived).toList();
 
   // ── Sync ──────────────────────────────────────────────────────────────────
   Future<void> _sync() async {
@@ -115,6 +119,45 @@ class _PromptsScreenState extends State<PromptsScreen> {
     if (!mounted) return;
     final updated = await PrefsService.getPrompts();
     setState(() => _local = updated);
+  }
+
+  // ── Archive ───────────────────────────────────────────────────────────────
+  Future<void> _archive(SavedPrompt p) async {
+    HapticFeedback.mediumImpact();
+    await PrefsService.archivePrompt(p.id);
+    if (!mounted) return;
+    setState(() {
+      final idx = _local.indexWhere((x) => x.id == p.id);
+      if (idx != -1) _local[idx] = _local[idx].copyWith(isArchived: true);
+    });
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      backgroundColor: kCard2,
+      behavior: SnackBarBehavior.floating,
+      content: Text('"${p.name}" archivé', style: GoogleFonts.inter(color: kText, fontSize: 13)),
+      action: SnackBarAction(
+        label: 'Annuler',
+        textColor: kAccentMid,
+        onPressed: () async {
+          await PrefsService.unarchivePrompt(p.id);
+          if (!mounted) return;
+          setState(() {
+            final idx = _local.indexWhere((x) => x.id == p.id);
+            if (idx != -1) _local[idx] = _local[idx].copyWith(isArchived: false);
+          });
+        },
+      ),
+      duration: const Duration(seconds: 4),
+    ));
+  }
+
+  Future<void> _unarchive(SavedPrompt p) async {
+    await PrefsService.unarchivePrompt(p.id);
+    if (!mounted) return;
+    setState(() {
+      final idx = _local.indexWhere((x) => x.id == p.id);
+      if (idx != -1) _local[idx] = _local[idx].copyWith(isArchived: false);
+    });
+    showAppSnack(context, '"${p.name}" restauré');
   }
 
   // ── Favorite ──────────────────────────────────────────────────────────────
@@ -207,7 +250,7 @@ class _PromptsScreenState extends State<PromptsScreen> {
           if (_allTags.isNotEmpty) _buildTagsRow(),
           Expanded(child: _loading
             ? const Center(child: AppLoadingIndicator())
-            : items.isEmpty
+            : items.isEmpty && _archived.isEmpty
               ? AppEmptyState(
                   icon: Icons.description_outlined,
                   title: _searchCtrl.text.isNotEmpty ? 'Aucun résultat' : 'Aucun prompt',
@@ -222,20 +265,49 @@ class _PromptsScreenState extends State<PromptsScreen> {
               : RefreshIndicator(
                   color: kAccent, backgroundColor: kCard,
                   onRefresh: _sync,
-                  child: ListView.builder(
+                  child: ListView(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                    itemCount: items.length,
-                    itemBuilder: (_, i) => _PromptCard(
-                      prompt: items[i],
-                      onTap: () => _openDetail(items[i]),
-                      onDelete: () => _swipeDelete(items[i]),
-                      onFavorite: () => _toggleFavorite(items[i]),
-                      onCopyMd: () => _copyMd(items[i]),
-                      onShare: () => _share(items[i]),
-                      onEditTags: () => _editTags(items[i]),
-                      onHistory: () => Navigator.push(context, MaterialPageRoute(
-                        builder: (_) => PromptHistoryScreen(prompt: items[i], github: widget.github))),
-                    ),
+                    children: [
+                      ...items.map((p) => _PromptCard(
+                        prompt: p,
+                        onTap: () => _openDetail(p),
+                        onArchive: () => _archive(p),
+                        onFavorite: () => _toggleFavorite(p),
+                        onCopyMd: () => _copyMd(p),
+                        onShare: () => _share(p),
+                        onEditTags: () => _editTags(p),
+                        onHistory: () => Navigator.push(context, MaterialPageRoute(
+                          builder: (_) => PromptHistoryScreen(prompt: p, github: widget.github))),
+                      )),
+                      // ── Archived section ──────────────────────────────
+                      if (_archived.isNotEmpty) ...[
+                        GestureDetector(
+                          onTap: () { HapticFeedback.selectionClick(); setState(() => _showArchived = !_showArchived); },
+                          child: Container(
+                            margin: const EdgeInsets.only(top: 8, bottom: 6),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            decoration: BoxDecoration(color: kCard, borderRadius: BorderRadius.circular(8), border: Border.all(color: kBorder, width: 0.5)),
+                            child: Row(children: [
+                              Icon(_showArchived ? Icons.expand_less : Icons.expand_more, size: 16, color: kMuted2),
+                              const SizedBox(width: 8),
+                              Text('Archivés', style: GoogleFonts.inter(color: kMuted2, fontSize: 12.5, fontWeight: FontWeight.w500)),
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                decoration: BoxDecoration(color: kCard2, borderRadius: BorderRadius.circular(4)),
+                                child: Text('${_archived.length}', style: GoogleFonts.inter(color: kMuted, fontSize: 11, fontWeight: FontWeight.w600)),
+                              ),
+                            ]),
+                          ),
+                        ),
+                        if (_showArchived)
+                          ..._archived.map((p) => _ArchivedCard(
+                            prompt: p,
+                            onUnarchive: () => _unarchive(p),
+                            onDelete: () => _delete(p),
+                          )),
+                      ],
+                    ],
                   ),
                 ),
           ),
@@ -244,22 +316,6 @@ class _PromptsScreenState extends State<PromptsScreen> {
     );
   }
 
-  Future<void> _swipeDelete(SavedPrompt p) async {
-    final saved = p;
-    await _delete(p);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      backgroundColor: kCard2,
-      behavior: SnackBarBehavior.floating,
-      content: Text('"${saved.name}" supprimé', style: GoogleFonts.inter(color: kText, fontSize: 13)),
-      action: SnackBarAction(
-        label: 'Annuler',
-        textColor: kAccentMid,
-        onPressed: () => _undoDelete(saved),
-      ),
-      duration: const Duration(seconds: 4),
-    ));
-  }
 
   Widget _buildHeader() => Container(
     padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
@@ -417,12 +473,12 @@ class _PromptsScreenState extends State<PromptsScreen> {
 // ── PromptCard ────────────────────────────────────────────────────────────────
 class _PromptCard extends StatelessWidget {
   final SavedPrompt prompt;
-  final VoidCallback onTap, onDelete, onFavorite, onCopyMd, onShare, onEditTags, onHistory;
+  final VoidCallback onTap, onArchive, onFavorite, onCopyMd, onShare, onEditTags, onHistory;
 
   const _PromptCard({
     required this.prompt,
     required this.onTap,
-    required this.onDelete,
+    required this.onArchive,
     required this.onFavorite,
     required this.onCopyMd,
     required this.onShare,
@@ -441,19 +497,19 @@ class _PromptCard extends StatelessWidget {
         padding: const EdgeInsets.only(right: 20),
         margin: const EdgeInsets.only(bottom: 8),
         decoration: BoxDecoration(
-          color: kRed.withOpacity(0.12),
+          color: kYellow.withOpacity(0.12),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: kRed.withOpacity(0.2), width: 0.5),
+          border: Border.all(color: kYellow.withOpacity(0.2), width: 0.5),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          const Icon(Icons.delete_outline, color: kRed, size: 18),
+          Icon(Icons.archive_outlined, color: kYellow, size: 18),
           const SizedBox(width: 4),
-          Text('Supprimer', style: GoogleFonts.inter(color: kRed, fontSize: 12.5, fontWeight: FontWeight.w600)),
+          Text('Archiver', style: GoogleFonts.inter(color: kYellow, fontSize: 12.5, fontWeight: FontWeight.w600)),
         ]),
       ),
       confirmDismiss: (_) async {
-        onDelete();
-        return false; // We handle deletion manually (with undo)
+        onArchive();
+        return false;
       },
       child: GestureDetector(
         onTap: onTap,
@@ -545,6 +601,58 @@ class _PromptCard extends StatelessWidget {
     if (diff.inDays < 7) return 'Il y a ${diff.inDays}j';
     if (diff.inDays < 30) return 'Il y a ${(diff.inDays / 7).floor()}sem';
     return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
+  }
+}
+
+// ── ArchivedCard ─────────────────────────────────────────────────────────────
+class _ArchivedCard extends StatelessWidget {
+  final SavedPrompt prompt;
+  final VoidCallback onUnarchive;
+  final VoidCallback onDelete;
+  const _ArchivedCard({required this.prompt, required this.onUnarchive, required this.onDelete});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = prompt;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: kCard.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: kBorder, width: 0.5),
+      ),
+      child: Row(children: [
+        Container(
+          width: 32, height: 32,
+          decoration: BoxDecoration(color: kCard2, borderRadius: BorderRadius.circular(7)),
+          child: const Icon(Icons.archive_outlined, size: 15, color: kMuted2),
+        ),
+        const SizedBox(width: 10),
+        Expanded(child: Text(
+          p.name.isNotEmpty ? p.name : p.id,
+          style: GoogleFonts.inter(color: kMuted, fontSize: 13, fontWeight: FontWeight.w400),
+          maxLines: 1, overflow: TextOverflow.ellipsis,
+        )),
+        const SizedBox(width: 8),
+        GestureDetector(
+          onTap: onUnarchive,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+            decoration: BoxDecoration(color: kAccentSub, borderRadius: BorderRadius.circular(6)),
+            child: Text('Restaurer', style: GoogleFonts.inter(color: kAccentMid, fontSize: 11, fontWeight: FontWeight.w600)),
+          ),
+        ),
+        const SizedBox(width: 6),
+        GestureDetector(
+          onTap: onDelete,
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+            child: Icon(Icons.delete_outline, size: 15, color: kMuted2),
+          ),
+        ),
+      ]),
+    );
   }
 }
 

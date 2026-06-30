@@ -105,6 +105,19 @@ class GitHubService {
     } catch (_) { return false; }
   }
 
+  // ── Retry helper ──────────────────────────────────────────────────────────
+  Future<T> _retry<T>(Future<T> Function() fn, {int retries = 3}) async {
+    for (int i = 0; i < retries; i++) {
+      try {
+        return await fn();
+      } catch (e) {
+        if (i == retries - 1) rethrow;
+        await Future.delayed(Duration(milliseconds: 800 * (i + 1)));
+      }
+    }
+    throw Exception('Max retries exceeded');
+  }
+
   // ── Rooms ─────────────────────────────────────────────────────────────────
 
   Future<List<Room>> fetchRooms() async {

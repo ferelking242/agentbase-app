@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import '../models/saved_prompt.dart';
 import '../services/github_service.dart';
+import '../services/prefs_service.dart';
 import '../theme.dart';
 import '../widgets/app_components.dart';
 
@@ -32,6 +34,8 @@ class _PromptDetailScreenState extends State<PromptDetailScreen> {
   bool _copiedMd = false;
   bool _loadingMd = false;
   bool _showMeta = false;
+  bool _renderMd = true;
+  bool _fromCache = false;
 
   @override
   void initState() {
@@ -45,9 +49,18 @@ class _PromptDetailScreenState extends State<PromptDetailScreen> {
   void dispose() { _nameCtrl.dispose(); super.dispose(); }
 
   Future<void> _loadContent() async {
+    // Try cache first for instant display
+    final cached = await PrefsService.getCachedContent(widget.prompt.id);
+    if (cached != null && mounted) setState(() { _rawContent = cached; _fromCache = true; });
+
     try {
       final c = await widget.github.fetchPromptContent(widget.prompt.id);
-      if (mounted) setState(() { _rawContent = c; _loadingContent = false; });
+      if (c != null) {
+        await PrefsService.setCachedContent(widget.prompt.id, c);
+        if (mounted) setState(() { _rawContent = c; _loadingContent = false; _fromCache = false; });
+      } else {
+        if (mounted) setState(() => _loadingContent = false);
+      }
     } catch (_) {
       if (mounted) setState(() => _loadingContent = false);
     }
@@ -255,24 +268,86 @@ class _PromptDetailScreenState extends State<PromptDetailScreen> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
                 const AppLabel('Contenu'),
-                const Spacer(),
-                if (_rawContent != null && _metaFields.isNotEmpty)
-                  GestureDetector(
-                    onTap: () => setState(() => _showMeta = !_showMeta),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(_showMeta ? Icons.visibility_off_outlined : Icons.code_outlined, size: 12, color: kMuted2),
-                      const SizedBox(width: 4),
-                      Text(_showMeta ? 'Masquer méta' : 'Voir méta', style: GoogleFonts.inter(color: kMuted2, fontSize: 11)),
-                    ]),
+                if (_fromCache) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(color: kYellow.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                    child: Text('cache', style: GoogleFonts.inter(color: kYellow, fontSize: 10, fontWeight: FontWeight.w600)),
                   ),
-                const SizedBox(width: 8),
-                if (_loadingContent) const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 1.5, color: kAccent)),
+                ],
+                const Spacer(),
+                if (_rawContent != null) ...[
+                  GestureDetector(
+                    onTap: () { HapticFeedback.selectionClick(); setState(() => _renderMd = !_renderMd); },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: _renderMd ? kAccentSub : kCard2,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: _renderMd ? kAccent.withOpacity(0.3) : kBorder, width: 0.5),
+                      ),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(_renderMd ? Icons.format_align_left : Icons.code, size: 11, color: _renderMd ? kAccentMid : kMuted),
+                        const SizedBox(width: 4),
+                        Text(_renderMd ? 'Rendu' : 'Brut', style: GoogleFonts.inter(color: _renderMd ? kAccentMid : kMuted, fontSize: 11, fontWeight: FontWeight.w600)),
+                      ]),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  if (_metaFields.isNotEmpty)
+                    GestureDetector(
+                      onTap: () => setState(() => _showMeta = !_showMeta),
+                      child: const Icon(Icons.code_outlined, size: 14, color: kMuted2),
+                    ),
+                ],
+                const SizedBox(width: 4),
+                if (_loadingContent && _rawContent == null)
+                  const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 1.5, color: kAccent)),
               ]),
               const SizedBox(height: 12),
-              if (_loadingContent)
+              if (_loadingContent && _rawContent == null)
                 const Padding(padding: EdgeInsets.symmetric(vertical: 20), child: Center(child: AppLoadingIndicator()))
               else if (_rawContent == null)
                 const AppEmptyState(icon: Icons.cloud_off, title: 'Non disponible', subtitle: 'Vérifie ta connexion ou ton token')
+              else if (_renderMd && !_showMeta)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: kBg, borderRadius: BorderRadius.circular(8), border: Border.all(color: kBorder, width: 0.5)),
+                  child: MarkdownBody(
+                    data: _displayContent,
+                    selectable: true,
+                    styleSheet: MarkdownStyleSheet(
+                      p: GoogleFonts.inter(color: kText2, fontSize: 13, height: 1.65),
+                      h1: GoogleFonts.inter(color: kText, fontSize: 18, fontWeight: FontWeight.w700),
+                      h2: GoogleFonts.inter(color: kText, fontSize: 15, fontWeight: FontWeight.w600),
+                      h3: GoogleFonts.inter(color: kText, fontSize: 13.5, fontWeight: FontWeight.w600),
+                      code: GoogleFonts.robotoMono(color: kAccentMid, fontSize: 12, backgroundColor: kAccentSub),
+                      codeblockDecoration: BoxDecoration(color: kCard2, borderRadius: BorderRadius.circular(8), border: Border.all(color: kBorder, width: 0.5)),
+                      blockquoteDecoration: BoxDecoration(border: Border(left: BorderSide(color: kAccent, width: 3)), color: kAccentSub.withOpacity(0.3)),
+                      listBullet: GoogleFonts.inter(color: kAccentMid, fontSize: 13),
+                      strong: GoogleFonts.inter(color: kText, fontWeight: FontWeight.w700),
+                      em: GoogleFonts.inter(color: kText2, fontStyle: FontStyle.italic),
+                      a: GoogleFonts.inter(color: kBlue, decoration: TextDecoration.underline),
+                      horizontalRuleDecoration: BoxDecoration(border: Border(top: BorderSide(color: kBorder, width: 0.5))),
+                    ),
+                    imageBuilder: (uri, title, alt) {
+                      if (uri.data != null) {
+                        try {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.memory(uri.data!.contentAsBytes(), fit: BoxFit.contain),
+                            ),
+                          );
+                        } catch (_) {}
+                      }
+                      return const SizedBox.shrink();
+                    },
+                  ),
+                )
               else ...[
                 Container(
                   width: double.infinity,
@@ -288,7 +363,7 @@ class _PromptDetailScreenState extends State<PromptDetailScreen> {
                   Row(children: [
                     const Icon(Icons.lock_outline, size: 11, color: kMuted2),
                     const SizedBox(width: 4),
-                    Text('Les métadonnées sont cachées dans le rendu — l\'IA y a accès.', style: GoogleFonts.inter(color: kMuted2, fontSize: 11)),
+                    Expanded(child: Text('Les métadonnées sont cachées dans le rendu — l\'IA y a accès.', style: GoogleFonts.inter(color: kMuted2, fontSize: 11))),
                   ]),
                 ],
               ],

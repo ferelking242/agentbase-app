@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/room.dart';
 import '../services/github_service.dart';
+import '../services/prefs_service.dart';
 import '../theme.dart';
 import '../widgets/app_components.dart';
 
@@ -17,6 +19,7 @@ class RoomsScreen extends StatefulWidget {
 
 class _RoomsScreenState extends State<RoomsScreen> {
   List<Room> _rooms = [];
+  Set<String> _pinned = {};
   bool _loading = true;
   String? _error;
   bool _creating = false;
@@ -31,11 +34,27 @@ class _RoomsScreenState extends State<RoomsScreen> {
     if (widget.github == null) { setState(() { _loading = false; _error = 'GitHub non configuré'; }); return; }
     setState(() { _loading = true; _error = null; });
     try {
-      final rooms = await widget.github!.fetchRooms();
-      if (mounted) setState(() { _rooms = rooms; _loading = false; });
+      final results = await Future.wait([
+        widget.github!.fetchRooms(),
+        PrefsService.getPinnedRooms(),
+      ]);
+      if (mounted) setState(() {
+        _rooms = results[0] as List<Room>;
+        _pinned = results[1] as Set<String>;
+        _loading = false;
+      });
     } catch (e) {
       if (mounted) setState(() { _error = e.toString().replaceAll('Exception: ', ''); _loading = false; });
     }
+  }
+
+  Future<void> _togglePin(Room room) async {
+    HapticFeedback.lightImpact();
+    final nowPinned = await PrefsService.togglePinRoom(room.id);
+    if (mounted) setState(() {
+      if (nowPinned) _pinned.add(room.id); else _pinned.remove(room.id);
+    });
+    if (mounted) showAppSnack(context, nowPinned ? '"${room.name}" épinglée' : '"${room.name}" désépinglée');
   }
 
   Future<void> _showCreateRoom() async {
@@ -192,19 +211,48 @@ class _RoomsScreenState extends State<RoomsScreen> {
     ]),
   ));
 
-  Widget _buildList() => ListView.separated(
-    padding: const EdgeInsets.all(16),
-    itemCount: _rooms.length,
-    separatorBuilder: (_, __) => const SizedBox(height: 8),
-    itemBuilder: (_, i) => _RoomCard(room: _rooms[i], onTap: () { widget.onRoomSelected?.call(_rooms[i]); Navigator.pop(context); }),
-  );
+  Widget _buildList() {
+    final pinned   = _rooms.where((r) => _pinned.contains(r.id)).toList();
+    final unpinned = _rooms.where((r) => !_pinned.contains(r.id)).toList();
+    final sorted   = [...pinned, ...unpinned];
+    return ListView.separated(
+      padding: const EdgeInsets.all(16),
+      itemCount: sorted.length + (pinned.isNotEmpty && unpinned.isNotEmpty ? 1 : 0),
+      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      itemBuilder: (_, i) {
+        if (pinned.isNotEmpty && unpinned.isNotEmpty && i == pinned.length) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(children: [
+              Expanded(child: Container(height: 0.5, color: kBorder)),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: Text('Autres', style: GoogleFonts.inter(color: kMuted2, fontSize: 11, letterSpacing: 0.5)),
+              ),
+              Expanded(child: Container(height: 0.5, color: kBorder)),
+            ]),
+          );
+        }
+        final idx = (pinned.isNotEmpty && unpinned.isNotEmpty && i > pinned.length) ? i - 1 : i;
+        final room = sorted[idx];
+        return _RoomCard(
+          room: room,
+          isPinned: _pinned.contains(room.id),
+          onTap: () { widget.onRoomSelected?.call(room); Navigator.pop(context); },
+          onPin: () => _togglePin(room),
+        );
+      },
+    );
+  }
 }
 
 // ── _RoomCard ─────────────────────────────────────────────────────────────────
 class _RoomCard extends StatelessWidget {
   final Room room;
+  final bool isPinned;
   final VoidCallback onTap;
-  const _RoomCard({required this.room, required this.onTap});
+  final VoidCallback onPin;
+  const _RoomCard({required this.room, required this.onTap, required this.onPin, this.isPinned = false});
 
   @override
   Widget build(BuildContext context) {
@@ -240,8 +288,17 @@ class _RoomCard extends StatelessWidget {
               Text('${room.promptCount}', style: GoogleFonts.inter(color: kMuted2, fontSize: 12)),
               const SizedBox(width: 2),
               const Icon(Icons.article_outlined, size: 12, color: kMuted2),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
             ],
+            GestureDetector(
+              onTap: onPin,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                child: Icon(isPinned ? Icons.push_pin : Icons.push_pin_outlined,
+                  size: 15, color: isPinned ? kAccentMid : kMuted2),
+              ),
+            ),
+            const SizedBox(width: 2),
             const Icon(Icons.chevron_right, size: 18, color: kMuted2),
           ]),
         ]),
