@@ -586,7 +586,7 @@ class _FileChip extends StatelessWidget {
           onTap: onLongPress,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-            decoration: BoxDecoration(color: Colors.black70, borderRadius: BorderRadius.circular(6)),
+            decoration: BoxDecoration(color: Colors.black.withOpacity(0.75), borderRadius: BorderRadius.circular(6)),
             child: Row(mainAxisSize: MainAxisSize.min, children: const [
               Icon(Icons.edit, size: 12, color: Colors.white),
               SizedBox(width: 3),
