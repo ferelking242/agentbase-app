@@ -393,53 +393,81 @@ class GitHubService {
     return '$_raw/$path';
   }
 
+  /// Retourne le MIME type d'après l'extension du fichier.
+  static String _imageMime(String filename) {
+    final ext = filename.split('.').last.toLowerCase();
+    return const {
+      'jpg': 'image/jpeg', 'jpeg': 'image/jpeg',
+      'png': 'image/png',  'gif': 'image/gif',
+      'webp': 'image/webp',
+    }[ext] ?? 'image/jpeg';
+  }
+
+  /// Génère une data URI base64 pour une image (inline dans le MD).
+  /// Si l'image est trop grosse (> 3 Mo encodé), retourne null pour
+  /// éviter de dépasser la limite de l'API GitHub (1 Mo par push).
+  static String? _imageDataUri(String filename, Uint8List bytes) {
+    final encoded = base64Encode(bytes);
+    if (encoded.length > 3 * 1024 * 1024) return null; // > ~3 Mo → trop gros
+    return 'data:${_imageMime(filename)};base64,$encoded';
+  }
+
   Future<String> pushDirectPrompt(
     String id, String text, List<AttachedFile> files, {
     Room? room, String? roomContext,
   }) async {
     if (_pat.isEmpty) throw Exception('PAT non configuré — va dans Paramètres');
-    final urlMap = <String, String>{};
+
+    // urlMap  : nom original → URL raw GitHub (stockage permanent)
+    // inlineMap: nom original → data URI base64 (affichage inline Claude/ChatGPT)
+    final urlMap    = <String, String>{};
+    final inlineMap = <String, String>{};
+
     for (final f in files) {
       final safeName = f.name.replaceAll(' ', '_');
+      // Upload vers GitHub pour la sauvegarde
       try {
         final url = await _uploadAsset('assets/prompts/$id/$safeName', f.bytes);
         urlMap[f.name] = url;
       } catch (_) {}
+      // Construit la data URI base64 pour l'affichage inline (Claude / ChatGPT)
+      if (f.isImage) {
+        final dataUri = _imageDataUri(f.name, f.bytes);
+        inlineMap[f.name] = dataUri ?? (urlMap[f.name] ?? '');
+      } else {
+        inlineMap[f.name] = urlMap[f.name] ?? '';
+      }
     }
+
     final mentionPattern = RegExp(r'@(\w+)');
     final usedFiles = <String>{};
-    String resolveUrl(String mention) {
-      final needle = mention.toLowerCase();
-      for (final entry in urlMap.entries) {
-        final norm = entry.key.replaceAll(' ', '_').replaceAll('.', '_').toLowerCase();
-        if (norm == needle || entry.key.toLowerCase() == needle) return entry.value;
-        if (norm.startsWith(needle) || needle.startsWith(norm.split('_').first)) return entry.value;
-      }
-      return '';
-    }
+
+    // Résout le nom original d'un fichier à partir d'une @mention
     String resolveFileName(String mention) {
       final needle = mention.toLowerCase();
-      for (final key in urlMap.keys) {
+      for (final key in inlineMap.keys) {
         final norm = key.replaceAll(' ', '_').replaceAll('.', '_').toLowerCase();
         if (norm == needle || key.toLowerCase() == needle) return key;
         if (norm.startsWith(needle) || needle.startsWith(norm.split('_').first)) return key;
       }
       return mention;
     }
+
     final contentBuf = StringBuffer();
     int lastEnd = 0;
     for (final match in mentionPattern.allMatches(text)) {
       final beforeText = text.substring(lastEnd, match.start);
       if (beforeText.isNotEmpty) contentBuf.write(beforeText);
       final mentionKey = match.group(1)!;
-      final url = resolveUrl(mentionKey);
-      final fileName = resolveFileName(mentionKey);
-      if (url.isNotEmpty) {
+      final fileName   = resolveFileName(mentionKey);
+      final inlineUrl  = inlineMap[fileName] ?? '';
+      if (inlineUrl.isNotEmpty) {
         if (usedFiles.contains(fileName)) {
           contentBuf.write('\n*[@$mentionKey — voir image ci-dessus]*\n');
         } else {
           usedFiles.add(fileName);
-          contentBuf.write('\n\n![$fileName]($url)\n\n');
+          // data URI → image inline dans Claude/ChatGPT
+          contentBuf.write('\n\n![$fileName]($inlineUrl)\n\n');
         }
       } else {
         contentBuf.write(match.group(0)!);
@@ -448,9 +476,12 @@ class GitHubService {
     }
     if (lastEnd < text.length) contentBuf.write(text.substring(lastEnd));
     final inlineContent = contentBuf.toString().trim();
-    final nonMentioned = urlMap.entries.where((e) => !usedFiles.contains(e.key)).toList();
+
+    // Fichiers non mentionnés → section "Pièces jointes" avec data URI aussi
+    final nonMentioned = inlineMap.entries.where((e) => !usedFiles.contains(e.key)).toList();
+
     final now = DateTime.now();
-    final sb = StringBuffer();
+    final sb  = StringBuffer();
     sb.writeln('<!-- AGENTBASE_META');
     sb.writeln('ID: $id');
     sb.writeln('Created: ${now.toIso8601String()}');
@@ -463,8 +494,17 @@ class GitHubService {
     if (nonMentioned.isNotEmpty) {
       sb.writeln(); sb.writeln('## Pièces jointes'); sb.writeln();
       for (final e in nonMentioned) {
-        final isImg = ['png','jpg','jpeg','gif','webp'].contains(e.key.split('.').last.toLowerCase());
-        sb.writeln(isImg ? '![${e.key}](${e.value})' : '[${e.key}](${e.value})');
+        if (e.value.isEmpty) continue;
+        final isImg = ['png','jpg','jpeg','gif','webp']
+            .contains(e.key.split('.').last.toLowerCase());
+        // Inline si data URI, lien sinon (non-image ou image trop grosse)
+        if (isImg && e.value.startsWith('data:')) {
+          sb.writeln('![${e.key}](${e.value})');
+        } else if (isImg) {
+          sb.writeln('![${e.key}](${e.value})');
+        } else {
+          sb.writeln('[${e.key}](${e.value})');
+        }
       }
     }
     if (roomContext != null && roomContext.trim().isNotEmpty) {
