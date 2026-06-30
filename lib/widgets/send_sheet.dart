@@ -7,14 +7,39 @@ import 'app_components.dart';
 
 typedef SendResult = ({String name, Room? room});
 
+// ── Smart title from prompt text ──────────────────────────────────────────────
+String _smartTitle(String raw) {
+  if (raw.isEmpty) return '';
+  var s = raw
+      .replaceAll(RegExp(r'#{1,6}\s*'), '')
+      .replaceAll(RegExp(r'[*_`~>]'), '')
+      .replaceAll(RegExp(r'\[([^\]]+)\]\([^)]+\)', dotAll: true), r'$1')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+  final sentMatch = RegExp(r'^(.+?[.?!])(\s|$)').firstMatch(s);
+  if (sentMatch != null && sentMatch.group(1)!.length >= 8) {
+    s = sentMatch.group(1)!.trim();
+  } else {
+    final firstLine = s.split('\n').first.trim();
+    if (firstLine.isNotEmpty) s = firstLine;
+  }
+  if (s.length > 60) {
+    s = s.substring(0, 57);
+    final last = s.lastIndexOf(' ');
+    if (last > 15) s = s.substring(0, last);
+    s = '$s…';
+  }
+  return s.isNotEmpty ? s : raw.split(' ').take(6).join(' ');
+}
+
 class SendSheet extends StatefulWidget {
-  final String defaultName;
+  final String promptText;
   final List<Room> preloadedRooms;
   final GitHubService github;
 
   const SendSheet({
     super.key,
-    required this.defaultName,
+    required this.promptText,
     required this.preloadedRooms,
     required this.github,
   });
@@ -32,7 +57,7 @@ class _SendSheetState extends State<SendSheet> {
   @override
   void initState() {
     super.initState();
-    _ctrl = TextEditingController(text: widget.defaultName);
+    _ctrl = TextEditingController(text: _smartTitle(widget.promptText));
     _rooms = List.from(widget.preloadedRooms);
     if (_rooms.isEmpty) _fetchRooms();
   }
@@ -70,33 +95,34 @@ class _SendSheetState extends State<SendSheet> {
             children: [
               const AppDragHandle(),
 
-              // Section: Nom du prompt
+              // Nom du prompt
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const AppLabel('Nom du prompt'),
+                  Row(children: [
+                    const AppLabel('Nom du prompt'),
+                    const Spacer(),
+                    GestureDetector(
+                      onTap: () => setState(() => _ctrl.text = _smartTitle(widget.promptText)),
+                      child: Text('Regénérer', style: GoogleFonts.inter(color: kAccentMid, fontSize: 11.5)),
+                    ),
+                  ]),
                   const SizedBox(height: 8),
                   AppInput(
                     controller: _ctrl,
                     autofocus: true,
-                    hint: 'Ex: Analyse de données',
+                    hint: 'Ex: Analyse de performance UI',
                     onSubmitted: (_) => _submit(),
                     suffix: GestureDetector(
                       onTap: () => _ctrl.clear(),
-                      child: const Padding(
-                        padding: EdgeInsets.all(12),
-                        child: Icon(Icons.close, size: 16, color: kMuted2),
-                      ),
+                      child: const Padding(padding: EdgeInsets.all(12), child: Icon(Icons.close, size: 16, color: kMuted2)),
                     ),
                   ),
                 ]),
               ),
 
-              // Section: Room
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
-                child: const AppLabel('Assigner à une room'),
-              ),
+              // Room
+              Padding(padding: const EdgeInsets.fromLTRB(20, 4, 20, 8), child: const AppLabel('Assigner à une room')),
               SizedBox(
                 height: 44,
                 child: _loading
@@ -112,11 +138,7 @@ class _SendSheetState extends State<SendSheet> {
                         scrollDirection: Axis.horizontal,
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         children: [
-                          RoomChip(
-                            label: 'Aucune',
-                            selected: _room == null,
-                            onTap: () => setState(() => _room = null),
-                          ),
+                          RoomChip(label: 'Aucune', selected: _room == null, onTap: () => setState(() => _room = null)),
                           ..._rooms.map((r) => RoomChip(
                             label: r.name,
                             icon: r.iconData,
@@ -132,25 +154,17 @@ class _SendSheetState extends State<SendSheet> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
                 child: Row(children: [
-                  Expanded(
-                    child: AppButton(
-                      label: 'Annuler',
-                      variant: AppButtonVariant.outline,
-                      fullWidth: true,
-                      onTap: () => Navigator.pop(context),
-                      padding: const EdgeInsets.symmetric(vertical: 13),
-                    ),
-                  ),
+                  Expanded(child: AppButton(
+                    label: 'Annuler', variant: AppButtonVariant.outline, fullWidth: true,
+                    onTap: () => Navigator.pop(context),
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                  )),
                   const SizedBox(width: 10),
-                  Expanded(
-                    flex: 2,
-                    child: AppButton(
-                      label: _room != null ? 'Envoyer → ${_room!.name}' : 'Envoyer',
-                      fullWidth: true,
-                      onTap: _submit,
-                      padding: const EdgeInsets.symmetric(vertical: 13),
-                    ),
-                  ),
+                  Expanded(flex: 2, child: AppButton(
+                    label: _room != null ? 'Envoyer → ${_room!.name}' : 'Envoyer',
+                    fullWidth: true, onTap: _submit,
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                  )),
                 ]),
               ),
             ],
@@ -190,10 +204,7 @@ class RoomChip extends StatelessWidget {
         decoration: BoxDecoration(
           color: selected ? c.withOpacity(0.12) : kBg,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: selected ? c.withOpacity(0.6) : kBorder,
-            width: selected ? 1 : 0.5,
-          ),
+          border: Border.all(color: selected ? c.withOpacity(0.6) : kBorder, width: selected ? 1 : 0.5),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           if (icon != null) ...[
