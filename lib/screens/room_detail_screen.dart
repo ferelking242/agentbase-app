@@ -65,26 +65,42 @@ class _RoomBodyState extends State<_RoomBody> with SingleTickerProviderStateMixi
   }
 
   Future<void> _loadContext() async {
-    final c = await widget.github.fetchContext(widget.room.id);
-    if (mounted) setState(() { _context = c; _ctxLoading = false; });
+    try {
+      final c = await widget.github.fetchContext(widget.room.id);
+      if (mounted) setState(() { _context = c; _ctxLoading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _ctxLoading = false);
+    }
   }
 
   Future<void> _loadRules() async {
-    final r = await widget.github.fetchRules(widget.room.id);
-    if (mounted) setState(() { _rules = r ?? ''; _rulesList = _parseRules(r ?? ''); _rulesLoading = false; });
+    try {
+      final r = await widget.github.fetchRules(widget.room.id);
+      if (mounted) setState(() { _rules = r ?? ''; _rulesList = _parseRules(r ?? ''); _rulesLoading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _rulesLoading = false);
+    }
   }
 
   Future<void> _loadChat() async {
-    final m = await widget.github.fetchMessages(widget.room.id);
-    if (mounted) setState(() { _messages = m; _chatLoading = false; });
+    try {
+      final m = await widget.github.fetchMessages(widget.room.id);
+      if (mounted) setState(() { _messages = m; _chatLoading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _chatLoading = false);
+    }
   }
 
   Future<void> _loadPrompts() async {
-    final p = await widget.github.fetchPrompts(widget.room.id);
-    if (mounted) setState(() {
-      _prompts = p.map((a) => _LocalPrompt(id: a.id, name: a.name, text: a.text, status: a.status, createdAt: a.createdAt)).toList();
-      _promptLoading = false;
-    });
+    try {
+      final p = await widget.github.fetchPrompts(widget.room.id);
+      if (mounted) setState(() {
+        _prompts = p.map((a) => _LocalPrompt(id: a.id, name: a.name, text: a.text, status: a.status, createdAt: a.createdAt)).toList();
+        _promptLoading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _promptLoading = false);
+    }
   }
 
   Future<void> _loadTranscripts() async {

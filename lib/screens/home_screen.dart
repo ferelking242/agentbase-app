@@ -679,68 +679,69 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
         decoration: const BoxDecoration(color: kBg, border: Border(top: BorderSide(color: kBorder, width: 0.5))),
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          if (_files.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: SizedBox(
-                height: 78,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: _files.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 6),
-                  itemBuilder: (_, i) => _FileChip(
-                    file: _files[i],
-                    onTap: _files[i].isImage ? () => _showImageFullscreen(_files[i].bytes, _files[i].name) : null,
-                    onLongPress: () => _showFileMenu(i),
-                    onRemove: () => setState(() => _files.removeAt(i)),
-                  ),
-                ),
-              ),
-            ),
-          Container(
-            decoration: BoxDecoration(color: kCard, borderRadius: BorderRadius.circular(12), border: Border.all(color: kBorder, width: 0.5)),
-            child: Column(children: [
-              TextField(
-                controller: _ctrl, focusNode: _focus, maxLines: 6, minLines: 1,
-                onChanged: (_) => setState(() {}),
-                style: GoogleFonts.inter(color: kText, fontSize: 14, height: 1.5),
-                cursorColor: kAccent, cursorWidth: 1.5,
-                decoration: InputDecoration(
-                  hintText: 'Écris ton prompt… ou tape @ ou @@',
-                  hintStyle: GoogleFonts.inter(color: kMuted2, fontSize: 14),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
-                  isDense: true,
-                ),
-              ),
+        child: Container(
+          decoration: BoxDecoration(
+            color: kCard,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: kBorder, width: 0.5),
+          ),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            // Images inside the box (like ChatGPT)
+            if (_files.isNotEmpty)
               Padding(
-                padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                child: Row(children: [
-                  _ToolBtn(icon: Icons.add, onTap: _showAttachMenu, tooltip: 'Joindre'),
-                  _ToolBtn(icon: Icons.content_paste_rounded, onTap: _paste, tooltip: 'Coller'),
-                  _ToolBtn(icon: Icons.open_in_full_rounded, onTap: _openFullscreen, tooltip: 'Plein écran'),
-                  _ToolBtn(icon: Icons.remove_red_eye_outlined, onTap: _showPreview, tooltip: 'Prévisualiser (Ctrl+Entrée pour envoyer)'),
-                  _ToolBtn(icon: Icons.auto_awesome_outlined, onTap: _showTemplates, tooltip: 'Templates'),
-                  const Spacer(),
-                  GestureDetector(
-                    onTap: hasContent ? _send : null,
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 150),
-                      width: 34, height: 34,
-                      decoration: BoxDecoration(
-                        color: hasContent ? kAccent : kCard2,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: hasContent ? Colors.transparent : kBorder, width: 0.5),
-                      ),
-                      child: Icon(Icons.arrow_upward_rounded, size: 18, color: hasContent ? Colors.white : kMuted2),
+                padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
+                child: SizedBox(
+                  height: 76,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _files.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 6),
+                    itemBuilder: (_, i) => _FileChip(
+                      file: _files[i],
+                      onTap: _files[i].isImage ? () => _showImageFullscreen(_files[i].bytes, _files[i].name) : null,
+                      onLongPress: () => _showFileMenu(i),
+                      onRemove: () => setState(() => _files.removeAt(i)),
                     ),
                   ),
-                ]),
+                ),
               ),
-            ]),
-          ),
-        ]),
+            TextField(
+              controller: _ctrl, focusNode: _focus, maxLines: 6, minLines: 1,
+              onChanged: (_) => setState(() {}),
+              style: GoogleFonts.inter(color: kText, fontSize: 14, height: 1.5),
+              cursorColor: kAccent, cursorWidth: 1.5,
+              decoration: InputDecoration(
+                hintText: 'Écris ton prompt… ou tape @ ou @@',
+                hintStyle: GoogleFonts.inter(color: kMuted2, fontSize: 14),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+                isDense: true,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+              child: Row(children: [
+                _ToolBtn(icon: Icons.add, onTap: _showAttachMenu, tooltip: 'Joindre'),
+                _ToolBtn(icon: Icons.open_in_full_rounded, onTap: _openFullscreen, tooltip: 'Plein écran'),
+                _ToolBtn(icon: Icons.auto_awesome_outlined, onTap: _showTemplates, tooltip: 'Templates'),
+                const Spacer(),
+                GestureDetector(
+                  onTap: hasContent ? _send : null,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    width: 34, height: 34,
+                    decoration: BoxDecoration(
+                      color: hasContent ? kAccent : kCard2,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: hasContent ? Colors.transparent : kBorder, width: 0.5),
+                    ),
+                    child: Icon(Icons.arrow_upward_rounded, size: 18, color: hasContent ? Colors.white : kMuted2),
+                  ),
+                ),
+              ]),
+            ),
+          ]),
+        ),
       ),
     );
   }
